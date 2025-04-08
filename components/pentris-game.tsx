@@ -15,6 +15,10 @@ export default function PentrisGame() {
   const [gameOver, setGameOver] = useState(false)
   const [paused, setPaused] = useState(false)
   const [gameStarted, setGameStarted] = useState(false)
+  const [isLocking, setIsLocking] = useState(false)
+  const lockTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const lockTimeRef = useRef<number>(0)
+  const LOCK_DELAY = 3000 // 3 seconds in milliseconds
 
   // Game state
   const [board, setBoard] = useState<number[][]>(() =>
@@ -22,7 +26,7 @@ export default function PentrisGame() {
       .fill(0)
       .map(() => Array(BOARD_WIDTH).fill(0)),
   )
-  const [currentPiece, setCurrentPiece] = useState<any>(null)
+  const [currentPiece, setCurrentPiece] = useState<{ shape: [number, number][]; x: number; y: number; type: string } | null>(null)
   const [nextPiece, setNextPiece] = useState<any>(null)
 
   const pentominoShapes = createPentominoShapes()
@@ -45,11 +49,17 @@ export default function PentrisGame() {
     setGameOver(false)
     setPaused(false)
     setGameStarted(true)
+    setIsLocking(false)
+
+    if (lockTimerRef.current) {
+      clearTimeout(lockTimerRef.current)
+      lockTimerRef.current = null
+    }
 
     // Generate first pieces
     const firstPiece = generateRandomPiece()
     const secondPiece = generateRandomPiece()
-    setCurrentPiece(firstPiece)
+    setCurrentPiece(firstPiece as { shape: [number, number][]; x: number; y: number; type: string })
     setNextPiece(secondPiece)
 
     // Set initial speed based on level
@@ -65,16 +75,16 @@ export default function PentrisGame() {
   const generateRandomPiece = () => {
     const keys = Object.keys(pentominoShapes)
     const randomKey = keys[Math.floor(Math.random() * keys.length)]
-    const shape = pentominoShapes[randomKey]
+    const shape = pentominoShapes[randomKey as keyof typeof pentominoShapes] as [number, number][]
 
     // Find the width of the shape
     let maxX = 0
-    for (const [x, y] of shape) {
+    for (const [x, y] of Array.isArray(shape) ? shape : []) {
       maxX = Math.max(maxX, x)
     }
 
     return {
-      shape: shape,
+      shape: shape as [number, number][],
       x: Math.floor(BOARD_WIDTH / 2) - Math.ceil(maxX / 2),
       y: 0,
       type: randomKey,
@@ -101,6 +111,15 @@ export default function PentrisGame() {
     return true
   }
 
+  // Check if the piece can move down
+  const canMoveDown = (piece: any) => {
+    const testPiece = {
+      ...piece,
+      y: piece.y + 1,
+    }
+    return isValidPosition(testPiece)
+  }
+
   // Move piece left
   const moveLeft = () => {
     if (paused || gameOver || !currentPiece) return
@@ -112,6 +131,11 @@ export default function PentrisGame() {
 
     if (isValidPosition(newPiece)) {
       setCurrentPiece(newPiece)
+
+      // Reset lock timer if piece is at bottom but moved
+      if (isLocking && !canMoveDown(newPiece)) {
+        resetLockTimer()
+      }
     }
   }
 
@@ -126,6 +150,11 @@ export default function PentrisGame() {
 
     if (isValidPosition(newPiece)) {
       setCurrentPiece(newPiece)
+
+      // Reset lock timer if piece is at bottom but moved
+      if (isLocking && !canMoveDown(newPiece)) {
+        resetLockTimer()
+      }
     }
   }
 
@@ -142,9 +171,42 @@ export default function PentrisGame() {
       setCurrentPiece(newPiece)
       return true
     } else {
-      // Piece can't move down further, lock it in place
-      lockPiece()
+      // Piece can't move down further, start lock delay
+      if (!isLocking) {
+        startLockTimer()
+      }
       return false
+    }
+  }
+
+  // Start the lock timer
+  const startLockTimer = () => {
+    if (lockTimerRef.current) {
+      clearTimeout(lockTimerRef.current)
+    }
+
+    setIsLocking(true)
+    lockTimeRef.current = Date.now() + LOCK_DELAY
+
+    lockTimerRef.current = setTimeout(() => {
+      lockPiece()
+      setIsLocking(false)
+      lockTimerRef.current = null
+    }, LOCK_DELAY)
+  }
+
+  // Reset the lock timer
+  const resetLockTimer = () => {
+    if (lockTimerRef.current) {
+      clearTimeout(lockTimerRef.current)
+
+      lockTimeRef.current = Date.now() + LOCK_DELAY
+
+      lockTimerRef.current = setTimeout(() => {
+        lockPiece()
+        setIsLocking(false)
+        lockTimerRef.current = null
+      }, LOCK_DELAY)
     }
   }
 
@@ -168,59 +230,29 @@ export default function PentrisGame() {
       }
     }
 
-    const newPiece = {
+    // Create a new piece at the lowest position
+    const droppedPiece = {
       ...currentPiece,
       y: newY,
     }
 
-    setCurrentPiece(newPiece)
-    lockPiece()
+    // Update the current piece position
+    setCurrentPiece(droppedPiece)
+
+    // Start the lock timer
+    startLockTimer()
   }
 
-  // Rotate piece
-  const rotatePiece = () => {
-    if (paused || gameOver || !currentPiece) return
-
-    // Create a new rotated shape
-    const rotatedShape = currentPiece.shape.map(([x, y]) => {
-      // 90-degree clockwise rotation: (x, y) -> (-y, x)
-      return [-y, x]
-    })
-
-    const newPiece = {
-      ...currentPiece,
-      shape: rotatedShape,
-    }
-
-    // Try the rotation, if it doesn't work, try wall kicks
-    if (isValidPosition(newPiece)) {
-      setCurrentPiece(newPiece)
-    } else {
-      // Try wall kicks (move left/right to make rotation work)
-      for (const offset of [-1, 1, -2, 2]) {
-        const kickedPiece = {
-          ...newPiece,
-          x: newPiece.x + offset,
-        }
-
-        if (isValidPosition(kickedPiece)) {
-          setCurrentPiece(kickedPiece)
-          return
-        }
-      }
-    }
-  }
-
-  // Lock the current piece in place and generate a new one
-  const lockPiece = () => {
-    if (!currentPiece) return
+  // Lock a piece at a specific position
+  const lockPieceAtPosition = (piece: any) => {
+    if (!piece) return
 
     // Create a new board with the locked piece
     const newBoard = [...board.map((row) => [...row])]
 
-    for (const [x, y] of currentPiece.shape) {
-      const boardX = currentPiece.x + x
-      const boardY = currentPiece.y + y
+    for (const [x, y] of piece.shape) {
+      const boardX = piece.x + x
+      const boardY = piece.y + y
 
       if (boardY < 0) {
         // Game over if piece is locked above the board
@@ -228,7 +260,7 @@ export default function PentrisGame() {
         return
       }
 
-      newBoard[boardY][boardX] = pentominoShapes.getTypeIndex(currentPiece.type)
+      newBoard[boardY][boardX] = pentominoShapes.getTypeIndex(piece.type)
     }
 
     setBoard(newBoard)
@@ -279,6 +311,57 @@ export default function PentrisGame() {
     setNextPiece(generateRandomPiece())
   }
 
+  // Lock the current piece in place and generate a new one
+  const lockPiece = () => {
+    if (!currentPiece) return
+    lockPieceAtPosition(currentPiece)
+  }
+
+  // Rotate piece
+  const rotatePiece = () => {
+    if (paused || gameOver || !currentPiece) return
+
+    // Create a new rotated shape
+    const rotatedShape = currentPiece.shape.map(([x, y]: [number, number]) => {
+      // 90-degree clockwise rotation: (x, y) -> (-y, x)
+      return [-y, x]
+    })
+
+    const newPiece = {
+      ...currentPiece,
+      shape: rotatedShape as [number, number][],
+    }
+
+    // Try the rotation, if it doesn't work, try wall kicks
+    if (isValidPosition(newPiece)) {
+      setCurrentPiece(newPiece)
+
+      // Reset lock timer if piece is at bottom but rotated
+      if (isLocking && !canMoveDown(newPiece)) {
+        resetLockTimer()
+      }
+    } else {
+      // Try wall kicks (move left/right to make rotation work)
+      for (const offset of [-1, 1, -2, 2]) {
+        const kickedPiece = {
+          ...newPiece,
+          x: newPiece.x + offset,
+        }
+
+        if (isValidPosition(kickedPiece)) {
+          setCurrentPiece(kickedPiece)
+
+          // Reset lock timer if piece is at bottom but rotated with wall kick
+          if (isLocking && !canMoveDown(kickedPiece)) {
+            resetLockTimer()
+          }
+
+          return
+        }
+      }
+    }
+  }
+
   // Check for completed lines
   const checkCompletedLines = (boardToCheck: number[][]) => {
     const completedLines: number[] = []
@@ -325,7 +408,7 @@ export default function PentrisGame() {
     const now = performance.now()
     const deltaTime = now - lastMoveDownTime.current
 
-    if (deltaTime > moveDownInterval.current) {
+    if (deltaTime > moveDownInterval.current && !isLocking) {
       moveDown()
       lastMoveDownTime.current = now
     }
@@ -370,7 +453,24 @@ export default function PentrisGame() {
 
     // Draw current piece
     if (currentPiece) {
-      ctx.fillStyle = COLORS[pentominoShapes.getTypeIndex(currentPiece.type) - 1] || "#888"
+      // Use a flashing effect if the piece is locking
+      let pieceColor = COLORS[pentominoShapes.getTypeIndex(currentPiece.type) - 1] || "#888"
+
+      if (isLocking) {
+        // Calculate remaining lock time
+        const remainingTime = Math.max(0, lockTimeRef.current - Date.now())
+        const lockProgress = remainingTime / LOCK_DELAY
+
+        // Flash faster as time runs out
+        const flashRate = 100 + Math.floor(400 * lockProgress)
+        const flashPhase = Math.floor(Date.now() / flashRate) % 2
+
+        if (flashPhase === 0) {
+          pieceColor = "#fff" // Flash white
+        }
+      }
+
+      ctx.fillStyle = pieceColor
 
       for (const [x, y] of currentPiece.shape) {
         const boardX = currentPiece.x + x
@@ -383,36 +483,47 @@ export default function PentrisGame() {
         }
       }
 
-      // Draw ghost piece (preview of where piece will land)
-      let ghostY = currentPiece.y
+      // Draw ghost piece (preview of where piece will land) if not locking
+      if (!isLocking) {
+        let ghostY = currentPiece.y
 
-      // Find the lowest valid position
-      while (true) {
-        ghostY++
-        const testPiece = {
-          ...currentPiece,
-          y: ghostY,
+        // Find the lowest valid position
+        while (true) {
+          ghostY++
+          const testPiece = {
+            ...currentPiece,
+            y: ghostY,
+          }
+
+          if (!isValidPosition(testPiece)) {
+            ghostY--
+            break
+          }
         }
 
-        if (!isValidPosition(testPiece)) {
-          ghostY--
-          break
+        if (ghostY !== currentPiece.y) {
+          ctx.fillStyle = "rgba(255, 255, 255, 0.2)"
+
+          for (const [x, y] of currentPiece.shape) {
+            const boardX = currentPiece.x + x
+            const boardY = ghostY + y
+
+            if (boardY >= 0) {
+              ctx.fillRect(boardX * CELL_SIZE, boardY * CELL_SIZE, CELL_SIZE, CELL_SIZE)
+              ctx.strokeStyle = "#222"
+              ctx.strokeRect(boardX * CELL_SIZE, boardY * CELL_SIZE, CELL_SIZE, CELL_SIZE)
+            }
+          }
         }
       }
 
-      if (ghostY !== currentPiece.y) {
-        ctx.fillStyle = "rgba(255, 255, 255, 0.2)"
-
-        for (const [x, y] of currentPiece.shape) {
-          const boardX = currentPiece.x + x
-          const boardY = ghostY + y
-
-          if (boardY >= 0) {
-            ctx.fillRect(boardX * CELL_SIZE, boardY * CELL_SIZE, CELL_SIZE, CELL_SIZE)
-            ctx.strokeStyle = "#222"
-            ctx.strokeRect(boardX * CELL_SIZE, boardY * CELL_SIZE, CELL_SIZE, CELL_SIZE)
-          }
-        }
+      // Draw lock timer if piece is locking
+      if (isLocking) {
+        const remainingTime = Math.max(0, lockTimeRef.current - Date.now()) / 1000
+        ctx.fillStyle = "#fff"
+        ctx.font = "16px Arial"
+        ctx.textAlign = "center"
+        ctx.fillText(`Lock in: ${remainingTime.toFixed(1)}s`, canvas.width / 2, 20)
       }
     }
 
@@ -456,8 +567,11 @@ export default function PentrisGame() {
       if (gameLoopRef.current) {
         cancelAnimationFrame(gameLoopRef.current)
       }
+      if (lockTimerRef.current) {
+        clearTimeout(lockTimerRef.current)
+      }
     }
-  }, [board, currentPiece, gameOver, paused])
+  }, [board, currentPiece, gameOver, paused, isLocking])
 
   // Render next piece preview
   const renderNextPiece = () => {
@@ -496,7 +610,7 @@ export default function PentrisGame() {
                 .fill(0)
                 .map((_, x) => {
                   const hasPiece = nextPiece.shape.some(
-                    ([pieceX, pieceY]) => pieceX - minX === x && pieceY - minY === y,
+                    ([pieceX, pieceY]: [number, number]) => pieceX - minX === x && pieceY - minY === y,
                   )
 
                   return <div key={`${x}-${y}`} className={`w-5 h-5 ${hasPiece ? "bg-gray-500" : "bg-gray-900"}`} />
@@ -574,4 +688,3 @@ export default function PentrisGame() {
     </div>
   )
 }
-
