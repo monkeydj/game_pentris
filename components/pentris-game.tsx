@@ -18,6 +18,7 @@ export default function PentrisGame() {
   const [isLocking, setIsLocking] = useState(false)
   const lockTimerRef = useRef<NodeJS.Timeout | null>(null)
   const lockTimeRef = useRef<number>(0)
+  const currentPieceRef = useRef<any>(null)
   const LOCK_DELAY = 3000 // 3 seconds in milliseconds
 
   // Game state
@@ -26,7 +27,7 @@ export default function PentrisGame() {
       .fill(0)
       .map(() => Array(BOARD_WIDTH).fill(0)),
   )
-  const [currentPiece, setCurrentPiece] = useState<{ shape: [number, number][]; x: number; y: number; type: string } | null>(null)
+  const [currentPiece, setCurrentPiece] = useState<any>(null)
   const [nextPiece, setNextPiece] = useState<any>(null)
 
   const pentominoShapes = createPentominoShapes()
@@ -35,6 +36,11 @@ export default function PentrisGame() {
   const gameLoopRef = useRef<number | null>(null)
   const lastMoveDownTime = useRef<number>(0)
   const moveDownInterval = useRef<number>(1000)
+
+  // Update currentPieceRef when currentPiece changes
+  useEffect(() => {
+    currentPieceRef.current = currentPiece
+  }, [currentPiece])
 
   // Initialize game
   const initGame = () => {
@@ -59,7 +65,7 @@ export default function PentrisGame() {
     // Generate first pieces
     const firstPiece = generateRandomPiece()
     const secondPiece = generateRandomPiece()
-    setCurrentPiece(firstPiece as { shape: [number, number][]; x: number; y: number; type: string })
+    setCurrentPiece(firstPiece)
     setNextPiece(secondPiece)
 
     // Set initial speed based on level
@@ -73,18 +79,19 @@ export default function PentrisGame() {
 
   // Generate a random pentomino piece
   const generateRandomPiece = () => {
-    const keys = Object.keys(pentominoShapes)
-    const randomKey = keys[Math.floor(Math.random() * keys.length)]
-    const shape = pentominoShapes[randomKey as keyof typeof pentominoShapes] as [number, number][]
+    // Get only the shape keys (not including the getTypeIndex function)
+    const shapeKeys = Object.keys(pentominoShapes.shapes)
+    const randomKey = shapeKeys[Math.floor(Math.random() * shapeKeys.length)]
+    const shape = pentominoShapes.shapes[randomKey as keyof typeof pentominoShapes.shapes]
 
     // Find the width of the shape
     let maxX = 0
-    for (const [x, y] of Array.isArray(shape) ? shape : []) {
+    for (const [x, y] of shape) {
       maxX = Math.max(maxX, x)
     }
 
     return {
-      shape: shape as [number, number][],
+      shape: shape,
       x: Math.floor(BOARD_WIDTH / 2) - Math.ceil(maxX / 2),
       y: 0,
       type: randomKey,
@@ -189,9 +196,10 @@ export default function PentrisGame() {
     lockTimeRef.current = Date.now() + LOCK_DELAY
 
     lockTimerRef.current = setTimeout(() => {
-      lockPiece()
-      setIsLocking(false)
-      lockTimerRef.current = null
+      // Make sure we're still in a valid game state
+      if (!gameOver && !paused) {
+        finalizeLock()
+      }
     }, LOCK_DELAY)
   }
 
@@ -203,11 +211,29 @@ export default function PentrisGame() {
       lockTimeRef.current = Date.now() + LOCK_DELAY
 
       lockTimerRef.current = setTimeout(() => {
-        lockPiece()
-        setIsLocking(false)
-        lockTimerRef.current = null
+        // Make sure we're still in a valid game state
+        if (!gameOver && !paused) {
+          finalizeLock()
+        }
       }, LOCK_DELAY)
     }
+  }
+
+  // Finalize the locking process
+  const finalizeLock = () => {
+    // Clear the timer reference
+    lockTimerRef.current = null
+
+    // Use the current piece from the ref to ensure we have the latest state
+    const pieceToLock = currentPieceRef.current
+
+    if (pieceToLock) {
+      // Lock the current piece
+      lockPieceAtPosition(pieceToLock)
+    }
+
+    // Reset locking state
+    setIsLocking(false)
   }
 
   // Hard drop piece
@@ -263,6 +289,7 @@ export default function PentrisGame() {
       newBoard[boardY][boardX] = pentominoShapes.getTypeIndex(piece.type)
     }
 
+    // Update the board with the locked piece
     setBoard(newBoard)
 
     // Check for completed lines
@@ -329,7 +356,7 @@ export default function PentrisGame() {
 
     const newPiece = {
       ...currentPiece,
-      shape: rotatedShape as [number, number][],
+      shape: rotatedShape,
     }
 
     // Try the rotation, if it doesn't work, try wall kicks
@@ -379,8 +406,11 @@ export default function PentrisGame() {
   const removeCompletedLines = (boardToCheck: number[][], lines: number[]) => {
     const newBoard = [...boardToCheck]
 
+    // Sort lines in descending order to remove from bottom to top
+    const sortedLines = [...lines].sort((a, b) => b - a)
+
     // Remove completed lines
-    for (const line of lines) {
+    for (const line of sortedLines) {
       // Remove the line and add a new empty line at the top
       newBoard.splice(line, 1)
       newBoard.unshift(Array(BOARD_WIDTH).fill(0))

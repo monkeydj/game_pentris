@@ -107,8 +107,7 @@ export function createPentominoShapes() {
   }
 
   return {
-    ...shapes,
+    shapes,
     getTypeIndex,
   }
 }
-
