@@ -20,7 +20,7 @@ export default function PentrisGame() {
   const lockTimeRef = useRef<number>(0)
   const currentPieceRef = useRef<any>(null)
   const boardRef = useRef<number[][]>([])
-  const LOCK_DELAY = 3000 // 3 seconds in milliseconds
+  const LOCK_DELAY = 1500 // 1.5 seconds in milliseconds
 
   // Game state
   const [board, setBoard] = useState<number[][]>(() => {
