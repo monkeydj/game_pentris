@@ -40,7 +40,7 @@ export default function PentrisGame() {
   const gameLoopRef = useRef<number | null>(null)
   const lastMoveDownTime = useRef<number>(0)
   const moveDownInterval = useRef<number>(BASE_DROP_INTERVAL)
-  const autoDropEnabled = useRef<boolean>(true)
+  const autoDropTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   // Update currentPieceRef when currentPiece changes
   useEffect(() => {
@@ -68,11 +68,15 @@ export default function PentrisGame() {
     setPaused(false)
     setGameStarted(true)
     setIsLocking(false)
-    autoDropEnabled.current = true
 
     if (lockTimerRef.current) {
       clearTimeout(lockTimerRef.current)
       lockTimerRef.current = null
+    }
+
+    if (autoDropTimerRef.current) {
+      clearTimeout(autoDropTimerRef.current)
+      autoDropTimerRef.current = null
     }
 
     // Generate first pieces
@@ -89,6 +93,27 @@ export default function PentrisGame() {
     if (gameLoopRef.current) cancelAnimationFrame(gameLoopRef.current)
     lastMoveDownTime.current = performance.now()
     gameLoop()
+
+    // Start auto drop timer
+    startAutoDropTimer()
+  }
+
+  // Start auto drop timer
+  const startAutoDropTimer = () => {
+    if (autoDropTimerRef.current) {
+      clearTimeout(autoDropTimerRef.current)
+    }
+
+    autoDropTimerRef.current = setTimeout(() => {
+      if (!paused && !gameOver && currentPieceRef.current) {
+        moveDown(true)
+      }
+
+      // Continue auto dropping if game is still active
+      if (!paused && !gameOver) {
+        startAutoDropTimer()
+      }
+    }, moveDownInterval.current)
   }
 
   // Generate a random pentomino piece
@@ -139,94 +164,6 @@ export default function PentrisGame() {
       y: piece.y + 1,
     }
     return isValidPosition(testPiece)
-  }
-
-  // Move piece left
-  const moveLeft = () => {
-    if (paused || gameOver || !currentPiece) return
-
-    const newPiece = {
-      ...currentPiece,
-      x: currentPiece.x - 1,
-    }
-
-    if (isValidPosition(newPiece)) {
-      setCurrentPiece(newPiece)
-      currentPieceRef.current = newPiece
-
-      // Reset lock timer if piece is at bottom but moved
-      if (isLocking && !canMoveDown(newPiece)) {
-        resetLockTimer()
-      }
-    }
-  }
-
-  // Move piece right
-  const moveRight = () => {
-    if (paused || gameOver || !currentPiece) return
-
-    const newPiece = {
-      ...currentPiece,
-      x: currentPiece.x + 1,
-    }
-
-    if (isValidPosition(newPiece)) {
-      setCurrentPiece(newPiece)
-      currentPieceRef.current = newPiece
-
-      // Reset lock timer if piece is at bottom but moved
-      if (isLocking && !canMoveDown(newPiece)) {
-        resetLockTimer()
-      }
-    }
-  }
-
-  // Move piece down (manual action)
-  const moveDown = () => {
-    if (paused || gameOver || !currentPiece) return
-
-    const newPiece = {
-      ...currentPiece,
-      y: currentPiece.y + 1,
-    }
-
-    if (isValidPosition(newPiece)) {
-      setCurrentPiece(newPiece)
-      currentPieceRef.current = newPiece
-
-      // Reset the auto-drop timer to give more time before next automatic drop
-      lastMoveDownTime.current = performance.now()
-
-      return true
-    } else {
-      // Piece can't move down further, start lock delay
-      if (!isLocking) {
-        startLockTimer()
-      }
-      return false
-    }
-  }
-
-  // Auto drop piece (called by game loop)
-  const autoDropPiece = () => {
-    if (paused || gameOver || !currentPiece || !autoDropEnabled.current) return false
-
-    const newPiece = {
-      ...currentPiece,
-      y: currentPiece.y + 1,
-    }
-
-    if (isValidPosition(newPiece)) {
-      setCurrentPiece(newPiece)
-      currentPieceRef.current = newPiece
-      return true
-    } else {
-      // Piece can't move down further, start lock delay
-      if (!isLocking) {
-        startLockTimer()
-      }
-      return false
-    }
   }
 
   // Start the lock timer
@@ -280,9 +217,69 @@ export default function PentrisGame() {
 
     // Reset locking state
     setIsLocking(false)
+  }
 
-    // Reset auto drop timer
-    lastMoveDownTime.current = performance.now()
+  // Move piece left
+  const moveLeft = () => {
+    if (paused || gameOver || !currentPiece) return
+
+    const newPiece = {
+      ...currentPiece,
+      x: currentPiece.x - 1,
+    }
+
+    if (isValidPosition(newPiece)) {
+      setCurrentPiece(newPiece)
+      currentPieceRef.current = newPiece
+
+      // Reset lock timer if piece is at bottom but moved
+      if (isLocking && !canMoveDown(newPiece)) {
+        resetLockTimer()
+      }
+    }
+  }
+
+  // Move piece right
+  const moveRight = () => {
+    if (paused || gameOver || !currentPiece) return
+
+    const newPiece = {
+      ...currentPiece,
+      x: currentPiece.x + 1,
+    }
+
+    if (isValidPosition(newPiece)) {
+      setCurrentPiece(newPiece)
+      currentPieceRef.current = newPiece
+
+      // Reset lock timer if piece is at bottom but moved
+      if (isLocking && !canMoveDown(newPiece)) {
+        resetLockTimer()
+      }
+    }
+  }
+
+  // Move piece down (can be triggered manually or automatically)
+  const moveDown = (isAutomatic = false) => {
+    if (paused || gameOver || !currentPiece) return false
+
+    const newPiece = {
+      ...currentPiece,
+      y: currentPiece.y + 1,
+    }
+
+    if (isValidPosition(newPiece)) {
+      setCurrentPiece(newPiece)
+      currentPieceRef.current = newPiece
+
+      return true
+    } else {
+      // Piece can't move down further, start lock delay
+      if (!isLocking) {
+        startLockTimer()
+      }
+      return false
+    }
   }
 
   // Hard drop piece
@@ -491,21 +488,18 @@ export default function PentrisGame() {
       // Resume game
       lastMoveDownTime.current = performance.now()
       gameLoop()
+      startAutoDropTimer()
+    } else {
+      // Pause game
+      if (autoDropTimerRef.current) {
+        clearTimeout(autoDropTimerRef.current)
+      }
     }
   }
 
   // Game loop
   const gameLoop = () => {
     if (gameOver || paused) return
-
-    const now = performance.now()
-    const deltaTime = now - lastMoveDownTime.current
-
-    // Auto drop piece every second, even if in locking state
-    if (deltaTime > moveDownInterval.current) {
-      autoDropPiece()
-      lastMoveDownTime.current = now
-    }
 
     // Render game
     renderGame()
@@ -666,8 +660,21 @@ export default function PentrisGame() {
       if (lockTimerRef.current) {
         clearTimeout(lockTimerRef.current)
       }
+      if (autoDropTimerRef.current) {
+        clearTimeout(autoDropTimerRef.current)
+      }
     }
   }, [])
+
+  // Restart auto drop timer when a new piece is generated
+  useEffect(() => {
+    if (gameStarted && !paused && !gameOver && currentPiece) {
+      if (autoDropTimerRef.current) {
+        clearTimeout(autoDropTimerRef.current)
+      }
+      startAutoDropTimer()
+    }
+  }, [currentPiece, gameStarted, paused, gameOver])
 
   // Render next piece preview
   const renderNextPiece = () => {
