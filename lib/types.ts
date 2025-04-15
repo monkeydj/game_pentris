@@ -33,6 +33,25 @@ export interface GameStats {
   lines: number
 }
 
+// Log entry for a single game event
+export interface LogEntry {
+  timestamp: string
+  eventType: string
+  data: any
+  stats: GameStats
+  currentPiece?: GamePiece
+  boardState?: string
+}
+
+// Complete game log
+export interface GameLog {
+  sessionId: string
+  startTime: string
+  endTime: string
+  entries: LogEntry[]
+  finalStats: GameStats
+}
+
 // Represents the pentomino shapes collection
 export interface PentominoShapes {
   shapes: Record<string, CellPosition[]>
