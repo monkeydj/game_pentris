@@ -6,35 +6,36 @@ import { BOARD_WIDTH, BOARD_HEIGHT, CELL_SIZE, COLORS } from "@/lib/constants"
 import { createPentominoShapes } from "@/lib/pentomino-shapes"
 import { useGameControls } from "@/hooks/use-game-controls"
 import MobileControls from "./mobile-controls"
+import type { CellPosition, GameBoard, PentominoPiece, PentominoShapes } from "@/lib/types"
 
 export default function PentrisGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [score, setScore] = useState(0)
-  const [level, setLevel] = useState(1)
-  const [lines, setLines] = useState(0)
-  const [gameOver, setGameOver] = useState(false)
-  const [paused, setPaused] = useState(false)
-  const [gameStarted, setGameStarted] = useState(false)
-  const [isLocking, setIsLocking] = useState(false)
+  const [score, setScore] = useState<number>(0)
+  const [level, setLevel] = useState<number>(1)
+  const [lines, setLines] = useState<number>(0)
+  const [gameOver, setGameOver] = useState<boolean>(false)
+  const [paused, setPaused] = useState<boolean>(false)
+  const [gameStarted, setGameStarted] = useState<boolean>(false)
+  const [isLocking, setIsLocking] = useState<boolean>(false)
   const lockTimerRef = useRef<NodeJS.Timeout | null>(null)
   const lockTimeRef = useRef<number>(0)
-  const currentPieceRef = useRef<any>(null)
-  const boardRef = useRef<number[][]>([])
+  const currentPieceRef = useRef<PentominoPiece | null>(null)
+  const boardRef = useRef<GameBoard>([])
   const LOCK_DELAY = 1500 // 1.5 seconds in milliseconds
   const BASE_DROP_INTERVAL = 1000 // 1 second in milliseconds
 
   // Game state
-  const [board, setBoard] = useState<number[][]>(() => {
-    const initialBoard = Array(BOARD_HEIGHT)
+  const [board, setBoard] = useState<GameBoard>(() => {
+    const initialBoard: GameBoard = Array(BOARD_HEIGHT)
       .fill(0)
       .map(() => Array(BOARD_WIDTH).fill(0))
     boardRef.current = initialBoard
     return initialBoard
   })
-  const [currentPiece, setCurrentPiece] = useState<any>(null)
-  const [nextPiece, setNextPiece] = useState<any>(null)
+  const [currentPiece, setCurrentPiece] = useState<PentominoPiece | null>(null)
+  const [nextPiece, setNextPiece] = useState<PentominoPiece | null>(null)
 
-  const pentominoShapes = createPentominoShapes()
+  const pentominoShapes: PentominoShapes = createPentominoShapes()
 
   // Game loop reference
   const gameLoopRef = useRef<number | null>(null)
@@ -53,8 +54,8 @@ export default function PentrisGame() {
   }, [board])
 
   // Initialize game
-  const initGame = () => {
-    const initialBoard = Array(BOARD_HEIGHT)
+  const initGame = (): void => {
+    const initialBoard: GameBoard = Array(BOARD_HEIGHT)
       .fill(0)
       .map(() => Array(BOARD_WIDTH).fill(0))
 
@@ -99,7 +100,7 @@ export default function PentrisGame() {
   }
 
   // Start auto drop timer
-  const startAutoDropTimer = () => {
+  const startAutoDropTimer = (): void => {
     if (autoDropTimerRef.current) {
       clearTimeout(autoDropTimerRef.current)
     }
@@ -117,15 +118,15 @@ export default function PentrisGame() {
   }
 
   // Generate a random pentomino piece
-  const generateRandomPiece = () => {
+  const generateRandomPiece = (): PentominoPiece => {
     // Get only the shape keys (not including the getTypeIndex function)
     const shapeKeys = Object.keys(pentominoShapes.shapes)
     const randomKey = shapeKeys[Math.floor(Math.random() * shapeKeys.length)]
-    const shape = pentominoShapes.shapes[randomKey as keyof typeof pentominoShapes.shapes]
+    const shape = pentominoShapes.shapes[randomKey]
 
     // Find the width of the shape
     let maxX = 0
-    for (const [x, y] of shape) {
+    for (const [x] of shape) {
       maxX = Math.max(maxX, x)
     }
 
@@ -138,7 +139,7 @@ export default function PentrisGame() {
   }
 
   // Check if the current position is valid
-  const isValidPosition = (piece: any, boardToCheck: number[][] = boardRef.current) => {
+  const isValidPosition = (piece: PentominoPiece, boardToCheck: GameBoard = boardRef.current): boolean => {
     for (const [x, y] of piece.shape) {
       const newX = piece.x + x
       const newY = piece.y + y
@@ -158,8 +159,8 @@ export default function PentrisGame() {
   }
 
   // Check if the piece can move down
-  const canMoveDown = (piece: any) => {
-    const testPiece = {
+  const canMoveDown = (piece: PentominoPiece): boolean => {
+    const testPiece: PentominoPiece = {
       ...piece,
       y: piece.y + 1,
     }
@@ -167,7 +168,7 @@ export default function PentrisGame() {
   }
 
   // Start the lock timer
-  const startLockTimer = () => {
+  const startLockTimer = (): void => {
     if (lockTimerRef.current) {
       clearTimeout(lockTimerRef.current)
     }
@@ -184,7 +185,7 @@ export default function PentrisGame() {
   }
 
   // Reset the lock timer
-  const resetLockTimer = () => {
+  const resetLockTimer = (): void => {
     if (lockTimerRef.current) {
       clearTimeout(lockTimerRef.current)
 
@@ -200,7 +201,7 @@ export default function PentrisGame() {
   }
 
   // Finalize the locking process
-  const finalizeLock = () => {
+  const finalizeLock = (): void => {
     // Clear the timer reference
     if (lockTimerRef.current) {
       clearTimeout(lockTimerRef.current)
@@ -220,10 +221,10 @@ export default function PentrisGame() {
   }
 
   // Move piece left
-  const moveLeft = () => {
+  const moveLeft = (): void => {
     if (paused || gameOver || !currentPiece) return
 
-    const newPiece = {
+    const newPiece: PentominoPiece = {
       ...currentPiece,
       x: currentPiece.x - 1,
     }
@@ -240,10 +241,10 @@ export default function PentrisGame() {
   }
 
   // Move piece right
-  const moveRight = () => {
+  const moveRight = (): void => {
     if (paused || gameOver || !currentPiece) return
 
-    const newPiece = {
+    const newPiece: PentominoPiece = {
       ...currentPiece,
       x: currentPiece.x + 1,
     }
@@ -260,10 +261,10 @@ export default function PentrisGame() {
   }
 
   // Move piece down (can be triggered manually or automatically)
-  const moveDown = (isAutomatic = false) => {
+  const moveDown = (isAutomatic = false): boolean => {
     if (paused || gameOver || !currentPiece) return false
 
-    const newPiece = {
+    const newPiece: PentominoPiece = {
       ...currentPiece,
       y: currentPiece.y + 1,
     }
@@ -283,7 +284,7 @@ export default function PentrisGame() {
   }
 
   // Hard drop piece
-  const hardDrop = () => {
+  const hardDrop = (): void => {
     if (paused || gameOver || !currentPiece) return
 
     let newY = currentPiece.y
@@ -291,7 +292,7 @@ export default function PentrisGame() {
     // Find the lowest valid position
     while (true) {
       newY++
-      const testPiece = {
+      const testPiece: PentominoPiece = {
         ...currentPiece,
         y: newY,
       }
@@ -303,7 +304,7 @@ export default function PentrisGame() {
     }
 
     // Create a new piece at the lowest position
-    const droppedPiece = {
+    const droppedPiece: PentominoPiece = {
       ...currentPiece,
       y: newY,
     }
@@ -317,12 +318,12 @@ export default function PentrisGame() {
   }
 
   // Lock a piece at a specific position
-  const lockPieceAtPosition = (piece: any) => {
+  const lockPieceAtPosition = (piece: PentominoPiece): void => {
     if (!piece) return
 
     try {
       // Create a new board with the locked piece
-      const currentBoard = [...boardRef.current.map((row) => [...row])]
+      const currentBoard: GameBoard = [...boardRef.current.map((row) => [...row])]
 
       // Add the piece to the board
       for (const [x, y] of piece.shape) {
@@ -397,22 +398,22 @@ export default function PentrisGame() {
   }
 
   // Lock the current piece in place and generate a new one
-  const lockPiece = () => {
+  const lockPiece = (): void => {
     if (!currentPiece) return
     lockPieceAtPosition(currentPiece)
   }
 
   // Rotate piece
-  const rotatePiece = () => {
+  const rotatePiece = (): void => {
     if (paused || gameOver || !currentPiece) return
 
     // Create a new rotated shape
-    const rotatedShape = currentPiece.shape.map(([x, y]: [number, number]) => {
+    const rotatedShape: CellPosition[] = currentPiece.shape.map(([x, y]) => {
       // 90-degree clockwise rotation: (x, y) -> (-y, x)
-      return [-y, x]
+      return [-y, x] as CellPosition
     })
 
-    const newPiece = {
+    const newPiece: PentominoPiece = {
       ...currentPiece,
       shape: rotatedShape,
     }
@@ -429,7 +430,7 @@ export default function PentrisGame() {
     } else {
       // Try wall kicks (move left/right to make rotation work)
       for (const offset of [-1, 1, -2, 2]) {
-        const kickedPiece = {
+        const kickedPiece: PentominoPiece = {
           ...newPiece,
           x: newPiece.x + offset,
         }
@@ -450,7 +451,7 @@ export default function PentrisGame() {
   }
 
   // Check for completed lines
-  const checkCompletedLines = (boardToCheck: number[][]) => {
+  const checkCompletedLines = (boardToCheck: GameBoard): number[] => {
     const completedLines: number[] = []
 
     for (let y = 0; y < BOARD_HEIGHT; y++) {
@@ -463,8 +464,8 @@ export default function PentrisGame() {
   }
 
   // Remove completed lines and shift down
-  const removeCompletedLines = (boardToCheck: number[][], lines: number[]) => {
-    const newBoard = [...boardToCheck.map((row) => [...row])]
+  const removeCompletedLines = (boardToCheck: GameBoard, lines: number[]): GameBoard => {
+    const newBoard: GameBoard = [...boardToCheck.map((row) => [...row])]
 
     // Sort lines in descending order to remove from bottom to top
     const sortedLines = [...lines].sort((a, b) => b - a)
@@ -480,7 +481,7 @@ export default function PentrisGame() {
   }
 
   // Toggle pause
-  const togglePause = () => {
+  const togglePause = (): void => {
     if (gameOver || !gameStarted) return
 
     setPaused(!paused)
@@ -498,7 +499,7 @@ export default function PentrisGame() {
   }
 
   // Game loop
-  const gameLoop = () => {
+  const gameLoop = (): void => {
     if (gameOver || paused) return
 
     // Render game
@@ -509,7 +510,7 @@ export default function PentrisGame() {
   }
 
   // Render game
-  const renderGame = () => {
+  const renderGame = (): void => {
     const canvas = canvasRef.current
     if (!canvas) return
 
@@ -580,7 +581,7 @@ export default function PentrisGame() {
         // Find the lowest valid position
         while (true) {
           ghostY++
-          const testPiece = {
+          const testPiece: PentominoPiece = {
             ...currentPieceToRender,
             y: ghostY,
           }
@@ -713,7 +714,7 @@ export default function PentrisGame() {
                 .fill(0)
                 .map((_, x) => {
                   const hasPiece = nextPiece.shape.some(
-                    ([pieceX, pieceY]: [number, number]) => pieceX - minX === x && pieceY - minY === y,
+                    ([pieceX, pieceY]) => pieceX - minX === x && pieceY - minY === y,
                   )
 
                   return <div key={`${x}-${y}`} className={`w-5 h-5 ${hasPiece ? "bg-gray-500" : "bg-gray-900"}`} />

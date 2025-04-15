@@ -1,7 +1,9 @@
 // Define all 12 pentomino shapes
-export function createPentominoShapes() {
+import type { CellPosition, PentominoShapes } from "./types"
+
+export function createPentominoShapes(): PentominoShapes {
   // Each pentomino is defined by a set of coordinates relative to a center point
-  const shapes = {
+  const shapes: Record<string, CellPosition[]> = {
     // F pentomino
     F: [
       [0, 0],
@@ -101,7 +103,7 @@ export function createPentominoShapes() {
   }
 
   // Function to get the index of a pentomino type (1-based)
-  const getTypeIndex = (type: string) => {
+  const getTypeIndex = (type: string): number => {
     const types = Object.keys(shapes)
     return types.indexOf(type) + 1
   }

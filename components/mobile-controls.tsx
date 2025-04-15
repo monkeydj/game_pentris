@@ -6,7 +6,7 @@ import { ArrowDown, ArrowLeft, ArrowRight, RotateCcw, ChevronDown } from "lucide
 interface MobileControlsProps {
   moveLeft: () => void
   moveRight: () => void
-  moveDown: () => void
+  moveDown: () => void | boolean
   hardDrop: () => void
   rotatePiece: () => void
   isActive: boolean
@@ -49,4 +49,3 @@ export default function MobileControls({
     </div>
   )
 }
-

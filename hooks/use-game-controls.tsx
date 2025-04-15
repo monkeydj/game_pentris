@@ -5,7 +5,7 @@ import { useEffect } from "react"
 interface GameControlsProps {
   moveLeft: () => void
   moveRight: () => void
-  moveDown: () => void
+  moveDown: () => void | boolean
   hardDrop: () => void
   rotatePiece: () => void
   togglePause: () => void
@@ -62,4 +62,3 @@ export function useGameControls({
 
   return null
 }
-
