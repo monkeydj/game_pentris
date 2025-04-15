@@ -2,27 +2,42 @@
 
 import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { BOARD_WIDTH, BOARD_HEIGHT, CELL_SIZE, COLORS } from "@/lib/constants"
+import {
+  BOARD_WIDTH,
+  BOARD_HEIGHT,
+  CELL_SIZE,
+  COLORS,
+  LOCK_DELAY,
+  BASE_DROP_INTERVAL,
+  LEVEL_SPEED_FACTOR,
+  PIECE_TYPE_WEIGHTS,
+  SCORING,
+} from "@/lib/constants"
 import { createPentominoShapes } from "@/lib/pentomino-shapes"
+import { createTetrominoShapes } from "@/lib/tetromino-shapes"
+import { createTrominoShapes } from "@/lib/tromino-shapes"
 import { useGameControls } from "@/hooks/use-game-controls"
 import MobileControls from "./mobile-controls"
-import type { CellPosition, GameBoard, PentominoPiece, PentominoShapes } from "@/lib/types"
+import type { CellPosition, GameBoard, GamePiece, GameStats, PieceType } from "@/lib/types"
 
 export default function PentrisGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [score, setScore] = useState<number>(0)
-  const [level, setLevel] = useState<number>(1)
-  const [lines, setLines] = useState<number>(0)
+  const [stats, setStats] = useState<GameStats>({
+    score: 0,
+    level: 1,
+    lines: 0,
+  })
   const [gameOver, setGameOver] = useState<boolean>(false)
   const [paused, setPaused] = useState<boolean>(false)
   const [gameStarted, setGameStarted] = useState<boolean>(false)
   const [isLocking, setIsLocking] = useState<boolean>(false)
   const lockTimerRef = useRef<NodeJS.Timeout | null>(null)
   const lockTimeRef = useRef<number>(0)
-  const currentPieceRef = useRef<PentominoPiece | null>(null)
+  const currentPieceRef = useRef<GamePiece | null>(null)
   const boardRef = useRef<GameBoard>([])
-  const LOCK_DELAY = 1500 // 1.5 seconds in milliseconds
-  const BASE_DROP_INTERVAL = 1000 // 1 second in milliseconds
+  const moveDownInterval = useRef<number>(BASE_DROP_INTERVAL)
+  const autoDropTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const lastMoveScoreRef = useRef<number>(0)
 
   // Game state
   const [board, setBoard] = useState<GameBoard>(() => {
@@ -32,15 +47,16 @@ export default function PentrisGame() {
     boardRef.current = initialBoard
     return initialBoard
   })
-  const [currentPiece, setCurrentPiece] = useState<PentominoPiece | null>(null)
-  const [nextPiece, setNextPiece] = useState<PentominoPiece | null>(null)
+  const [currentPiece, setCurrentPiece] = useState<GamePiece | null>(null)
+  const [nextPiece, setNextPiece] = useState<GamePiece | null>(null)
 
-  const pentominoShapes: PentominoShapes = createPentominoShapes()
+  // Shape collections
+  const pentominoShapes = createPentominoShapes()
+  const tetrominoShapes = createTetrominoShapes()
+  const trominoShapes = createTrominoShapes()
 
   // Game loop reference
   const gameLoopRef = useRef<number | null>(null)
-  const moveDownInterval = useRef<number>(BASE_DROP_INTERVAL)
-  const autoDropTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   // Update currentPieceRef when currentPiece changes
   useEffect(() => {
@@ -61,13 +77,16 @@ export default function PentrisGame() {
     setBoard(initialBoard)
     boardRef.current = initialBoard
 
-    setScore(0)
-    setLevel(1)
-    setLines(0)
+    setStats({
+      score: 0,
+      level: 1,
+      lines: 0,
+    })
     setGameOver(false)
     setPaused(false)
     setGameStarted(true)
     setIsLocking(false)
+    lastMoveScoreRef.current = 0
 
     if (lockTimerRef.current) {
       clearTimeout(lockTimerRef.current)
@@ -87,7 +106,7 @@ export default function PentrisGame() {
     setNextPiece(secondPiece)
 
     // Set initial speed based on level
-    moveDownInterval.current = BASE_DROP_INTERVAL - (level - 1) * 50
+    moveDownInterval.current = BASE_DROP_INTERVAL - (stats.level - 1) * LEVEL_SPEED_FACTOR
 
     // Start game loop
     if (gameLoopRef.current) cancelAnimationFrame(gameLoopRef.current)
@@ -115,12 +134,45 @@ export default function PentrisGame() {
     }, moveDownInterval.current)
   }
 
-  // Generate a random pentomino piece
-  const generateRandomPiece = (): PentominoPiece => {
-    // Get only the shape keys (not including the getTypeIndex function)
-    const shapeKeys = Object.keys(pentominoShapes.shapes)
+  // Generate a random piece type based on weights
+  const getRandomPieceType = (): PieceType => {
+    const weights = PIECE_TYPE_WEIGHTS
+    const totalWeight = Object.values(weights).reduce((sum, weight) => sum + weight, 0)
+    let random = Math.random() * totalWeight
+
+    for (const [type, weight] of Object.entries(weights)) {
+      if (random < weight) {
+        return type as PieceType
+      }
+      random -= weight
+    }
+
+    return "pentomino" // Default fallback
+  }
+
+  // Get shapes collection based on piece type
+  const getShapesForType = (pieceType: PieceType) => {
+    switch (pieceType) {
+      case "tromino":
+        return trominoShapes
+      case "tetromino":
+        return tetrominoShapes
+      case "pentomino":
+      default:
+        return pentominoShapes
+    }
+  }
+
+  // Generate a random piece
+  const generateRandomPiece = (): GamePiece => {
+    // Randomly select piece type
+    const pieceType = getRandomPieceType()
+    const shapes = getShapesForType(pieceType)
+
+    // Get only the shape keys
+    const shapeKeys = Object.keys(shapes.shapes)
     const randomKey = shapeKeys[Math.floor(Math.random() * shapeKeys.length)]
-    const shape = pentominoShapes.shapes[randomKey]
+    const shape = shapes.shapes[randomKey]
 
     // Find the width of the shape
     let maxX = 0
@@ -128,16 +180,23 @@ export default function PentrisGame() {
       maxX = Math.max(maxX, x)
     }
 
+    // Select a random color for this piece type
+    const colorArray = COLORS[pieceType]
+    const colorIndex = Math.floor(Math.random() * colorArray.length)
+    const color = colorArray[colorIndex]
+
     return {
       shape: shape,
       x: Math.floor(BOARD_WIDTH / 2) - Math.ceil(maxX / 2),
       y: 0,
       type: randomKey,
+      pieceType: pieceType,
+      color: color,
     }
   }
 
   // Check if the current position is valid
-  const isValidPosition = (piece: PentominoPiece, boardToCheck: GameBoard = boardRef.current): boolean => {
+  const isValidPosition = (piece: GamePiece, boardToCheck: GameBoard = boardRef.current): boolean => {
     for (const [x, y] of piece.shape) {
       const newX = piece.x + x
       const newY = piece.y + y
@@ -157,8 +216,8 @@ export default function PentrisGame() {
   }
 
   // Check if the piece can move down
-  const canMoveDown = (piece: PentominoPiece): boolean => {
-    const testPiece: PentominoPiece = {
+  const canMoveDown = (piece: GamePiece): boolean => {
+    const testPiece: GamePiece = {
       ...piece,
       y: piece.y + 1,
     }
@@ -222,7 +281,7 @@ export default function PentrisGame() {
   const moveLeft = (): void => {
     if (paused || gameOver || !currentPiece) return
 
-    const newPiece: PentominoPiece = {
+    const newPiece: GamePiece = {
       ...currentPiece,
       x: currentPiece.x - 1,
     }
@@ -242,7 +301,7 @@ export default function PentrisGame() {
   const moveRight = (): void => {
     if (paused || gameOver || !currentPiece) return
 
-    const newPiece: PentominoPiece = {
+    const newPiece: GamePiece = {
       ...currentPiece,
       x: currentPiece.x + 1,
     }
@@ -262,7 +321,7 @@ export default function PentrisGame() {
   const moveDown = (isAutomatic = false): boolean => {
     if (paused || gameOver || !currentPiece) return false
 
-    const newPiece: PentominoPiece = {
+    const newPiece: GamePiece = {
       ...currentPiece,
       y: currentPiece.y + 1,
     }
@@ -270,6 +329,11 @@ export default function PentrisGame() {
     if (isValidPosition(newPiece)) {
       setCurrentPiece(newPiece)
       currentPieceRef.current = newPiece
+
+      // Add points for soft drop (manual move down)
+      if (!isAutomatic) {
+        addToScore(SCORING.softDrop)
+      }
 
       return true
     } else {
@@ -286,11 +350,12 @@ export default function PentrisGame() {
     if (paused || gameOver || !currentPiece) return
 
     let newY = currentPiece.y
+    let dropDistance = 0
 
     // Find the lowest valid position
     while (true) {
       newY++
-      const testPiece: PentominoPiece = {
+      const testPiece: GamePiece = {
         ...currentPiece,
         y: newY,
       }
@@ -299,10 +364,11 @@ export default function PentrisGame() {
         newY--
         break
       }
+      dropDistance++
     }
 
     // Create a new piece at the lowest position
-    const droppedPiece: PentominoPiece = {
+    const droppedPiece: GamePiece = {
       ...currentPiece,
       y: newY,
     }
@@ -311,17 +377,34 @@ export default function PentrisGame() {
     setCurrentPiece(droppedPiece)
     currentPieceRef.current = droppedPiece
 
+    // Add points for hard drop
+    addToScore(dropDistance * SCORING.hardDrop)
+
     // Start the lock timer
     startLockTimer()
   }
 
+  // Add to the score
+  const addToScore = (points: number): void => {
+    lastMoveScoreRef.current = points
+    setStats((prev) => ({
+      ...prev,
+      score: prev.score + points,
+    }))
+  }
+
   // Lock a piece at a specific position
-  const lockPieceAtPosition = (piece: PentominoPiece): void => {
+  const lockPieceAtPosition = (piece: GamePiece): void => {
     if (!piece) return
 
     try {
       // Create a new board with the locked piece
       const currentBoard: GameBoard = [...boardRef.current.map((row) => [...row])]
+
+      // Get color index for this piece
+      const colorIndex = COLORS[piece.pieceType].indexOf(piece.color) + 1
+      // Offset by piece type to ensure unique color indices
+      const colorValue = colorIndex + (piece.pieceType === "tetromino" ? 10 : piece.pieceType === "pentomino" ? 20 : 0)
 
       // Add the piece to the board
       for (const [x, y] of piece.shape) {
@@ -334,7 +417,7 @@ export default function PentrisGame() {
           return
         }
 
-        currentBoard[boardY][boardX] = pentominoShapes.getTypeIndex(piece.type)
+        currentBoard[boardY][boardX] = colorValue
       }
 
       // Update the board with the locked piece
@@ -349,37 +432,23 @@ export default function PentrisGame() {
         boardRef.current = updatedBoard
 
         // Update score and level
-        const newLines = lines + completedLines.length
+        const newLines = stats.lines + completedLines.length
         const newLevel = Math.floor(newLines / 10) + 1
 
         // Calculate score based on number of lines cleared
-        let lineScore = 0
-        switch (completedLines.length) {
-          case 1:
-            lineScore = 100
-            break
-          case 2:
-            lineScore = 300
-            break
-          case 3:
-            lineScore = 500
-            break
-          case 4:
-            lineScore = 800
-            break
-          default:
-            lineScore = completedLines.length * 300
-            break
-        }
+        const lineScore =
+          SCORING.linesClear[completedLines.length as keyof typeof SCORING.linesClear] || completedLines.length * 300
 
-        const newScore = score + lineScore * level
+        const newScore = stats.score + lineScore * stats.level
 
-        setLines(newLines)
-        setScore(newScore)
+        setStats({
+          score: newScore,
+          lines: newLines,
+          level: newLevel,
+        })
 
-        if (newLevel > level) {
-          setLevel(newLevel)
-          moveDownInterval.current = Math.max(100, BASE_DROP_INTERVAL - (newLevel - 1) * 50)
+        if (newLevel > stats.level) {
+          moveDownInterval.current = Math.max(100, BASE_DROP_INTERVAL - (newLevel - 1) * LEVEL_SPEED_FACTOR)
         }
       }
 
@@ -405,7 +474,7 @@ export default function PentrisGame() {
       return [-y, x] as CellPosition
     })
 
-    const newPiece: PentominoPiece = {
+    const newPiece: GamePiece = {
       ...currentPiece,
       shape: rotatedShape,
     }
@@ -422,7 +491,7 @@ export default function PentrisGame() {
     } else {
       // Try wall kicks (move left/right to make rotation work)
       for (const offset of [-1, 1, -2, 2]) {
-        const kickedPiece: PentominoPiece = {
+        const kickedPiece: GamePiece = {
           ...newPiece,
           x: newPiece.x + offset,
         }
@@ -500,6 +569,23 @@ export default function PentrisGame() {
     gameLoopRef.current = requestAnimationFrame(gameLoop)
   }
 
+  // Get color for a cell based on its value
+  const getColorForCell = (cellValue: number): string => {
+    if (cellValue === 0) return "#111" // Empty cell
+
+    // Determine piece type and color index
+    if (cellValue >= 20) {
+      // Pentomino
+      return COLORS.pentomino[cellValue - 20 - 1] || "#888"
+    } else if (cellValue >= 10) {
+      // Tetromino
+      return COLORS.tetromino[cellValue - 10 - 1] || "#888"
+    } else {
+      // Tromino
+      return COLORS.tromino[cellValue - 1] || "#888"
+    }
+  }
+
   // Render game
   const renderGame = (): void => {
     const canvas = canvasRef.current
@@ -518,7 +604,7 @@ export default function PentrisGame() {
         const cell = currentBoard[y][x]
 
         if (cell !== 0) {
-          ctx.fillStyle = COLORS[cell - 1] || "#888"
+          ctx.fillStyle = getColorForCell(cell)
           ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE)
           ctx.strokeStyle = "#222"
           ctx.strokeRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE)
@@ -536,7 +622,7 @@ export default function PentrisGame() {
     const currentPieceToRender = currentPieceRef.current
     if (currentPieceToRender) {
       // Use a flashing effect if the piece is locking
-      let pieceColor = COLORS[pentominoShapes.getTypeIndex(currentPieceToRender.type) - 1] || "#888"
+      let pieceColor = currentPieceToRender.color
 
       if (isLocking) {
         // Calculate remaining lock time
@@ -572,7 +658,7 @@ export default function PentrisGame() {
         // Find the lowest valid position
         while (true) {
           ghostY++
-          const testPiece: PentominoPiece = {
+          const testPiece: GamePiece = {
             ...currentPieceToRender,
             y: ghostY,
           }
@@ -618,6 +704,19 @@ export default function PentrisGame() {
       ctx.font = "24px Arial"
       ctx.textAlign = "center"
       ctx.fillText(gameOver ? "Game Over" : "Paused", canvas.width / 2, canvas.height / 2)
+    }
+
+    // Draw score popup if points were just earned
+    if (lastMoveScoreRef.current > 0) {
+      ctx.fillStyle = "#FFEB3B"
+      ctx.font = "bold 18px Arial"
+      ctx.textAlign = "center"
+      ctx.fillText(`+${lastMoveScoreRef.current}`, canvas.width / 2, canvas.height / 2 - 40)
+
+      // Clear the score popup after a short delay
+      setTimeout(() => {
+        lastMoveScoreRef.current = 0
+      }, 500)
     }
   }
 
@@ -668,6 +767,22 @@ export default function PentrisGame() {
     }
   }, [currentPiece, gameStarted, paused, gameOver])
 
+  // Get piece type label
+  const getPieceTypeLabel = (piece: GamePiece | null): string => {
+    if (!piece) return ""
+
+    switch (piece.pieceType) {
+      case "tromino":
+        return "Tromino"
+      case "tetromino":
+        return "Tetromino"
+      case "pentomino":
+        return "Pentomino"
+      default:
+        return ""
+    }
+  }
+
   // Render next piece preview
   const renderNextPiece = () => {
     if (!nextPiece) return null
@@ -690,7 +805,8 @@ export default function PentrisGame() {
 
     return (
       <div className="bg-gray-800 p-4 rounded-md">
-        <h3 className="text-lg font-medium mb-2 text-white">Next Piece</h3>
+        <h3 className="text-lg font-medium mb-1 text-white">Next Piece</h3>
+        <p className="text-sm text-gray-300 mb-2">{getPieceTypeLabel(nextPiece)}</p>
         <div
           className="grid gap-px"
           style={{
@@ -708,7 +824,13 @@ export default function PentrisGame() {
                     ([pieceX, pieceY]) => pieceX - minX === x && pieceY - minY === y,
                   )
 
-                  return <div key={`${x}-${y}`} className={`w-5 h-5 ${hasPiece ? "bg-gray-500" : "bg-gray-900"}`} />
+                  return (
+                    <div
+                      key={`${x}-${y}`}
+                      className={`w-5 h-5 ${hasPiece ? "" : "bg-gray-900"}`}
+                      style={hasPiece ? { backgroundColor: nextPiece.color } : {}}
+                    />
+                  )
                 }),
             )}
         </div>
@@ -736,17 +858,17 @@ export default function PentrisGame() {
         <div className="bg-gray-800 p-4 rounded-md text-white">
           <div className="mb-2">
             <h3 className="text-lg font-medium">Score</h3>
-            <p className="text-2xl font-bold">{score}</p>
+            <p className="text-2xl font-bold">{stats.score}</p>
           </div>
 
           <div className="mb-2">
             <h3 className="text-lg font-medium">Level</h3>
-            <p className="text-2xl font-bold">{level}</p>
+            <p className="text-2xl font-bold">{stats.level}</p>
           </div>
 
           <div>
             <h3 className="text-lg font-medium">Lines</h3>
-            <p className="text-2xl font-bold">{lines}</p>
+            <p className="text-2xl font-bold">{stats.lines}</p>
           </div>
         </div>
 

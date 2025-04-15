@@ -33,7 +33,7 @@ export default function MobileControls({
           <RotateCcw className="h-6 w-6" />
         </Button>
 
-        <Button variant="outline" size="icon" onClick={moveDown} className="h-14 w-full">
+        <Button variant="outline" size="icon" onClick={() => moveDown()} className="h-14 w-full">
           <ArrowDown className="h-6 w-6" />
         </Button>
       </div>
