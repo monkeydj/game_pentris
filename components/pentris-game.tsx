@@ -39,7 +39,6 @@ export default function PentrisGame() {
 
   // Game loop reference
   const gameLoopRef = useRef<number | null>(null)
-  const lastMoveDownTime = useRef<number>(0)
   const moveDownInterval = useRef<number>(BASE_DROP_INTERVAL)
   const autoDropTimerRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -92,7 +91,6 @@ export default function PentrisGame() {
 
     // Start game loop
     if (gameLoopRef.current) cancelAnimationFrame(gameLoopRef.current)
-    lastMoveDownTime.current = performance.now()
     gameLoop()
 
     // Start auto drop timer
@@ -397,12 +395,6 @@ export default function PentrisGame() {
     }
   }
 
-  // Lock the current piece in place and generate a new one
-  const lockPiece = (): void => {
-    if (!currentPiece) return
-    lockPieceAtPosition(currentPiece)
-  }
-
   // Rotate piece
   const rotatePiece = (): void => {
     if (paused || gameOver || !currentPiece) return
@@ -487,7 +479,6 @@ export default function PentrisGame() {
     setPaused(!paused)
     if (paused) {
       // Resume game
-      lastMoveDownTime.current = performance.now()
       gameLoop()
       startAutoDropTimer()
     } else {
