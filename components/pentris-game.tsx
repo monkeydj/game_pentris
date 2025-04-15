@@ -6,9 +6,35 @@ import { BOARD_WIDTH, BOARD_HEIGHT, CELL_SIZE, COLORS } from "@/lib/constants"
 import { createPentominoShapes } from "@/lib/pentomino-shapes"
 import { useGameControls } from "@/hooks/use-game-controls"
 import MobileControls from "./mobile-controls"
+import { useGameSounds } from "@/hooks/use-game-sounds"
+import { useGameSettings } from "@/hooks/use-game-settings"
+import { useHighScores } from "@/hooks/use-high-scores"
+import { useGameAnimations } from "@/hooks/use-game-animations"
+import { SettingsDialog } from "./settings-dialog"
+import { HighScoresDialog } from "./high-scores-dialog"
+import { GameErrorBoundary } from "./error-boundary"
+import { DebugPanel } from "./debug-panel"
+
+// Add types at the top after imports
+type Point = [number, number];
+
+interface PentominoPiece {
+  shape: Point[];
+  x: number;
+  y: number;
+  type: string;
+}
+
+type Board = number[][];
 
 export default function PentrisGame() {
+  const { settings } = useGameSettings()
+  const { playSound } = useGameSounds(settings.soundEnabled)
+  const { saveHighScore, isHighScore } = useHighScores()
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const ctx = canvasRef.current?.getContext('2d')
+  const { animateLineClear, animateLevelUp, isAnimating } = useGameAnimations(ctx)
+
   const [score, setScore] = useState(0)
   const [level, setLevel] = useState(1)
   const [lines, setLines] = useState(0)
@@ -18,21 +44,21 @@ export default function PentrisGame() {
   const [isLocking, setIsLocking] = useState(false)
   const lockTimerRef = useRef<NodeJS.Timeout | null>(null)
   const lockTimeRef = useRef<number>(0)
-  const currentPieceRef = useRef<any>(null)
-  const boardRef = useRef<number[][]>([])
+  const currentPieceRef = useRef<PentominoPiece | null>(null)
+  const boardRef = useRef<Board>([])
   const LOCK_DELAY = 1500 // 1.5 seconds in milliseconds
   const BASE_DROP_INTERVAL = 1000 // 1 second in milliseconds
 
   // Game state
-  const [board, setBoard] = useState<number[][]>(() => {
+  const [board, setBoard] = useState<Board>(() => {
     const initialBoard = Array(BOARD_HEIGHT)
       .fill(0)
       .map(() => Array(BOARD_WIDTH).fill(0))
     boardRef.current = initialBoard
     return initialBoard
   })
-  const [currentPiece, setCurrentPiece] = useState<any>(null)
-  const [nextPiece, setNextPiece] = useState<any>(null)
+  const [currentPiece, setCurrentPiece] = useState<PentominoPiece | null>(null)
+  const [nextPiece, setNextPiece] = useState<PentominoPiece | null>(null)
 
   const pentominoShapes = createPentominoShapes()
 
@@ -92,7 +118,7 @@ export default function PentrisGame() {
   }
 
   // Generate a random pentomino piece
-  const generateRandomPiece = () => {
+  const generateRandomPiece = (): PentominoPiece => {
     // Get only the shape keys (not including the getTypeIndex function)
     const shapeKeys = Object.keys(pentominoShapes.shapes)
     const randomKey = shapeKeys[Math.floor(Math.random() * shapeKeys.length)]
@@ -113,7 +139,7 @@ export default function PentrisGame() {
   }
 
   // Check if the current position is valid
-  const isValidPosition = (piece: any, boardToCheck: number[][] = boardRef.current) => {
+  const isValidPosition = (piece: PentominoPiece, boardToCheck: Board = boardRef.current) => {
     for (const [x, y] of piece.shape) {
       const newX = piece.x + x
       const newY = piece.y + y
@@ -133,7 +159,7 @@ export default function PentrisGame() {
   }
 
   // Check if the piece can move down
-  const canMoveDown = (piece: any) => {
+  const canMoveDown = (piece: PentominoPiece) => {
     const testPiece = {
       ...piece,
       y: piece.y + 1,
@@ -193,8 +219,7 @@ export default function PentrisGame() {
     if (isValidPosition(newPiece)) {
       setCurrentPiece(newPiece)
       currentPieceRef.current = newPiece
-
-      // Reset the auto-drop timer to give more time before next automatic drop
+      playSound('move')
       lastMoveDownTime.current = performance.now()
 
       return true
@@ -320,10 +345,12 @@ export default function PentrisGame() {
   }
 
   // Lock a piece at a specific position
-  const lockPieceAtPosition = (piece: any) => {
+  const lockPieceAtPosition = async (piece: PentominoPiece) => {
     if (!piece) return
 
     try {
+      playSound('drop')
+      
       // Create a new board with the locked piece
       const currentBoard = [...boardRef.current.map((row) => [...row])]
 
@@ -333,21 +360,24 @@ export default function PentrisGame() {
         const boardY = piece.y + y
 
         if (boardY < 0) {
-          // Game over if piece is locked above the board
           setGameOver(true)
+          playSound('gameover')
           return
         }
 
         currentBoard[boardY][boardX] = pentominoShapes.getTypeIndex(piece.type)
       }
 
-      // Update the board with the locked piece
       setBoard(currentBoard)
       boardRef.current = currentBoard
 
       // Check for completed lines
       const completedLines = checkCompletedLines(currentBoard)
       if (completedLines.length > 0) {
+        // Animate line clear
+        await animateLineClear(completedLines)
+        playSound('clear')
+
         const updatedBoard = removeCompletedLines(currentBoard, completedLines)
         setBoard(updatedBoard)
         boardRef.current = updatedBoard
@@ -356,7 +386,6 @@ export default function PentrisGame() {
         const newLines = lines + completedLines.length
         const newLevel = Math.floor(newLines / 10) + 1
 
-        // Calculate score based on number of lines cleared
         let lineScore = 0
         switch (completedLines.length) {
           case 1:
@@ -383,6 +412,8 @@ export default function PentrisGame() {
 
         if (newLevel > level) {
           setLevel(newLevel)
+          await animateLevelUp()
+          playSound('levelup')
           moveDownInterval.current = Math.max(100, BASE_DROP_INTERVAL - (newLevel - 1) * 50)
         }
       }
@@ -410,7 +441,7 @@ export default function PentrisGame() {
     if (paused || gameOver || !currentPiece) return
 
     // Create a new rotated shape
-    const rotatedShape = currentPiece.shape.map(([x, y]: [number, number]) => {
+    const rotatedShape = currentPiece.shape.map(([x, y]: Point) => {
       // 90-degree clockwise rotation: (x, y) -> (-y, x)
       return [-y, x]
     })
@@ -453,7 +484,7 @@ export default function PentrisGame() {
   }
 
   // Check for completed lines
-  const checkCompletedLines = (boardToCheck: number[][]) => {
+  const checkCompletedLines = (boardToCheck: Board) => {
     const completedLines: number[] = []
 
     for (let y = 0; y < BOARD_HEIGHT; y++) {
@@ -466,7 +497,7 @@ export default function PentrisGame() {
   }
 
   // Remove completed lines and shift down
-  const removeCompletedLines = (boardToCheck: number[][], lines: number[]) => {
+  const removeCompletedLines = (boardToCheck: Board, lines: number[]) => {
     const newBoard = [...boardToCheck.map((row) => [...row])]
 
     // Sort lines in descending order to remove from bottom to top
@@ -706,7 +737,7 @@ export default function PentrisGame() {
                 .fill(0)
                 .map((_, x) => {
                   const hasPiece = nextPiece.shape.some(
-                    ([pieceX, pieceY]: [number, number]) => pieceX - minX === x && pieceY - minY === y,
+                    ([pieceX, pieceY]: Point) => pieceX - minX === x && pieceY - minY === y,
                   )
 
                   return <div key={`${x}-${y}`} className={`w-5 h-5 ${hasPiece ? "bg-gray-500" : "bg-gray-900"}`} />
@@ -718,69 +749,100 @@ export default function PentrisGame() {
   }
 
   return (
-    <div className="flex flex-col md:flex-row gap-6 items-center">
-      <div className="relative">
-        <canvas ref={canvasRef} className="border-2 border-gray-700 bg-gray-800" />
+    <GameErrorBoundary>
+      <div className="flex flex-col md:flex-row gap-6 items-center">
+        <div className="relative">
+          <canvas 
+            ref={canvasRef} 
+            className="border-2 border-gray-700 bg-gray-800"
+            role="application"
+            aria-label="Pentris game board"
+            tabIndex={0}
+          />
+          
+          {!gameStarted && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-70">
+              <Button 
+                onClick={initGame}
+                className="text-lg px-6 py-3"
+                aria-label="Start new game"
+              >
+                Start Game
+              </Button>
+            </div>
+          )}
+        </div>
 
-        {!gameStarted && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-70">
-            <Button onClick={initGame} className="text-lg px-6 py-3">
-              Start Game
+        <div className="flex flex-col gap-4">
+          {renderNextPiece()}
+
+          <div className="bg-gray-800 p-4 rounded-md text-white">
+            <div className="mb-2">
+              <h3 className="text-lg font-medium">Score</h3>
+              <p className="text-2xl font-bold">{score}</p>
+            </div>
+
+            <div className="mb-2">
+              <h3 className="text-lg font-medium">Level</h3>
+              <p className="text-2xl font-bold">{level}</p>
+            </div>
+
+            <div>
+              <h3 className="text-lg font-medium">Lines</h3>
+              <p className="text-2xl font-bold">{lines}</p>
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            <Button onClick={togglePause} disabled={!gameStarted || gameOver} className="flex-1">
+              {paused ? "Resume" : "Pause"}
+            </Button>
+
+            <Button onClick={initGame} variant="destructive" className="flex-1">
+              {gameOver ? "Restart" : "New Game"}
             </Button>
           </div>
+
+          <div className="flex gap-2">
+            <SettingsDialog />
+            <HighScoresDialog />
+          </div>
+
+          <div className="bg-gray-800 p-4 rounded-md text-white">
+            <h3 className="text-lg font-medium mb-2">Controls</h3>
+            <ul className="text-sm space-y-1">
+              <li>← → : Move left/right</li>
+              <li>↓ : Move down</li>
+              <li>↑ : Rotate</li>
+              <li>Space : Hard drop</li>
+              <li>P : Pause/Resume</li>
+            </ul>
+          </div>
+        </div>
+
+        <MobileControls
+          moveLeft={moveLeft}
+          moveRight={moveRight}
+          moveDown={moveDown}
+          hardDrop={hardDrop}
+          rotatePiece={rotatePiece}
+          isActive={gameStarted && !gameOver && !paused}
+        />
+
+        {false && (
+          <DebugPanel
+            gameState={{
+              currentPiece,
+              board,
+              score,
+              level,
+              lines,
+              isLocking,
+              lockTimeRemaining: lockTimeRef.current ? Math.max(0, lockTimeRef.current - Date.now()) : 0,
+            }}
+          />
         )}
       </div>
-
-      <div className="flex flex-col gap-4">
-        {renderNextPiece()}
-
-        <div className="bg-gray-800 p-4 rounded-md text-white">
-          <div className="mb-2">
-            <h3 className="text-lg font-medium">Score</h3>
-            <p className="text-2xl font-bold">{score}</p>
-          </div>
-
-          <div className="mb-2">
-            <h3 className="text-lg font-medium">Level</h3>
-            <p className="text-2xl font-bold">{level}</p>
-          </div>
-
-          <div>
-            <h3 className="text-lg font-medium">Lines</h3>
-            <p className="text-2xl font-bold">{lines}</p>
-          </div>
-        </div>
-
-        <div className="flex gap-2">
-          <Button onClick={togglePause} disabled={!gameStarted || gameOver} className="flex-1">
-            {paused ? "Resume" : "Pause"}
-          </Button>
-
-          <Button onClick={initGame} variant="destructive" className="flex-1">
-            {gameOver ? "Restart" : "New Game"}
-          </Button>
-        </div>
-
-        <div className="bg-gray-800 p-4 rounded-md text-white">
-          <h3 className="text-lg font-medium mb-2">Controls</h3>
-          <ul className="text-sm space-y-1">
-            <li>← → : Move left/right</li>
-            <li>↓ : Move down</li>
-            <li>↑ : Rotate</li>
-            <li>Space : Hard drop</li>
-            <li>P : Pause/Resume</li>
-          </ul>
-        </div>
-      </div>
-
-      <MobileControls
-        moveLeft={moveLeft}
-        moveRight={moveRight}
-        moveDown={moveDown}
-        hardDrop={hardDrop}
-        rotatePiece={rotatePiece}
-        isActive={gameStarted && !gameOver && !paused}
-      />
-    </div>
+    </GameErrorBoundary>
   )
 }

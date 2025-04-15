@@ -1,7 +1,8 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { ArrowDown, ArrowLeft, ArrowRight, RotateCcw, ChevronDown } from "lucide-react"
+import { ArrowLeft, ArrowRight, ArrowDown, RotateCcw, ChevronDown } from "lucide-react"
+import { useMobile } from "@/hooks/use-mobile"
 
 interface MobileControlsProps {
   moveLeft: () => void
@@ -20,32 +21,88 @@ export default function MobileControls({
   rotatePiece,
   isActive,
 }: MobileControlsProps) {
-  if (!isActive) return null
+  const isMobile = useMobile()
+
+  if (!isMobile) return null
 
   return (
-    <div className="grid grid-cols-3 gap-2 mt-4 md:hidden">
-      <Button variant="outline" size="icon" onClick={moveLeft} className="h-14 w-14">
-        <ArrowLeft className="h-6 w-6" />
-      </Button>
+    <div className="fixed bottom-4 left-0 right-0 flex justify-center gap-4 px-4">
+      <div className="bg-black/50 backdrop-blur-sm rounded-lg p-4 flex gap-4">
+        {/* Movement controls */}
+        <div className="flex flex-col gap-2">
+          <div className="grid grid-cols-3 gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="bg-white/10 hover:bg-white/20"
+              onTouchStart={(e) => {
+                e.preventDefault()
+                if (isActive) moveLeft()
+              }}
+              disabled={!isActive}
+            >
+              <ArrowLeft className="h-6 w-6" />
+              <span className="sr-only">Move Left</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="bg-white/10 hover:bg-white/20"
+              onTouchStart={(e) => {
+                e.preventDefault()
+                if (isActive) moveDown()
+              }}
+              disabled={!isActive}
+            >
+              <ArrowDown className="h-6 w-6" />
+              <span className="sr-only">Move Down</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="bg-white/10 hover:bg-white/20"
+              onTouchStart={(e) => {
+                e.preventDefault()
+                if (isActive) moveRight()
+              }}
+              disabled={!isActive}
+            >
+              <ArrowRight className="h-6 w-6" />
+              <span className="sr-only">Move Right</span>
+            </Button>
+          </div>
+        </div>
 
-      <div className="grid grid-rows-2 gap-2">
-        <Button variant="outline" size="icon" onClick={rotatePiece} className="h-14 w-full">
-          <RotateCcw className="h-6 w-6" />
-        </Button>
-
-        <Button variant="outline" size="icon" onClick={moveDown} className="h-14 w-full">
-          <ArrowDown className="h-6 w-6" />
-        </Button>
+        {/* Action controls */}
+        <div className="flex flex-col gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="bg-white/10 hover:bg-white/20"
+            onTouchStart={(e) => {
+              e.preventDefault()
+              if (isActive) rotatePiece()
+            }}
+            disabled={!isActive}
+          >
+            <RotateCcw className="h-6 w-6" />
+            <span className="sr-only">Rotate</span>
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="bg-white/10 hover:bg-white/20"
+            onTouchStart={(e) => {
+              e.preventDefault()
+              if (isActive) hardDrop()
+            }}
+            disabled={!isActive}
+          >
+            <ChevronDown className="h-6 w-6" />
+            <span className="sr-only">Hard Drop</span>
+          </Button>
+        </div>
       </div>
-
-      <Button variant="outline" size="icon" onClick={moveRight} className="h-14 w-14">
-        <ArrowRight className="h-6 w-6" />
-      </Button>
-
-      <Button variant="outline" onClick={hardDrop} className="col-span-3 h-14">
-        <ChevronDown className="h-6 w-6 mr-2" />
-        Hard Drop
-      </Button>
     </div>
   )
 }
