@@ -17,11 +17,13 @@ import { createPentominoShapes } from "@/lib/pentomino-shapes"
 import { createTetrominoShapes } from "@/lib/tetromino-shapes"
 import { createTrominoShapes } from "@/lib/tromino-shapes"
 import { useGameControls } from "@/hooks/use-game-controls"
+import { GameLogger } from "@/lib/logger"
 import MobileControls from "./mobile-controls"
 import type { CellPosition, GameBoard, GamePiece, GameStats, PieceType } from "@/lib/types"
 
 export default function PentrisGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const logger = useRef(new GameLogger())
   const [stats, setStats] = useState<GameStats>({
     score: 0,
     level: 1,
@@ -70,6 +72,7 @@ export default function PentrisGame() {
 
   // Initialize game
   const initGame = (): void => {
+    logger.current.log('game_start', { timestamp: Date.now() })
     const initialBoard: GameBoard = Array(BOARD_HEIGHT)
       .fill(0)
       .map(() => Array(BOARD_WIDTH).fill(0))
@@ -104,6 +107,9 @@ export default function PentrisGame() {
     setCurrentPiece(firstPiece)
     currentPieceRef.current = firstPiece
     setNextPiece(secondPiece)
+
+    logger.current.log('piece_generated', { piece: firstPiece })
+    logger.current.log('next_piece_generated', { piece: secondPiece })
 
     // Set initial speed based on level
     moveDownInterval.current = BASE_DROP_INTERVAL - (stats.level - 1) * LEVEL_SPEED_FACTOR
@@ -289,6 +295,7 @@ export default function PentrisGame() {
     if (isValidPosition(newPiece)) {
       setCurrentPiece(newPiece)
       currentPieceRef.current = newPiece
+      logger.current.log('piece_moved', { direction: 'left', piece: newPiece })
 
       // Reset lock timer if piece is at bottom but moved
       if (isLocking && !canMoveDown(newPiece)) {
@@ -309,6 +316,7 @@ export default function PentrisGame() {
     if (isValidPosition(newPiece)) {
       setCurrentPiece(newPiece)
       currentPieceRef.current = newPiece
+      logger.current.log('piece_moved', { direction: 'right', piece: newPiece })
 
       // Reset lock timer if piece is at bottom but moved
       if (isLocking && !canMoveDown(newPiece)) {
@@ -329,6 +337,11 @@ export default function PentrisGame() {
     if (isValidPosition(newPiece)) {
       setCurrentPiece(newPiece)
       currentPieceRef.current = newPiece
+      logger.current.log('piece_moved', {
+        direction: 'down',
+        piece: newPiece,
+        isAutomatic
+      })
 
       // Add points for soft drop (manual move down)
       if (!isAutomatic) {
@@ -377,6 +390,12 @@ export default function PentrisGame() {
     setCurrentPiece(droppedPiece)
     currentPieceRef.current = droppedPiece
 
+    logger.current.log('piece_hard_dropped', {
+      piece: droppedPiece,
+      dropDistance,
+      points: dropDistance * SCORING.hardDrop
+    })
+
     // Add points for hard drop
     addToScore(dropDistance * SCORING.hardDrop)
 
@@ -387,10 +406,18 @@ export default function PentrisGame() {
   // Add to the score
   const addToScore = (points: number): void => {
     lastMoveScoreRef.current = points
-    setStats((prev) => ({
-      ...prev,
-      score: prev.score + points,
-    }))
+    setStats((prev) => {
+      const newScore = prev.score + points;
+      logger.current.log('score_updated', {
+        points,
+        oldScore: prev.score,
+        newScore
+      })
+      return {
+        ...prev,
+        score: newScore,
+      }
+    })
   }
 
   // Lock a piece at a specific position
@@ -413,6 +440,11 @@ export default function PentrisGame() {
 
         if (boardY < 0) {
           // Game over if piece is locked above the board
+          logger.current.log('game_over', {
+            finalScore: stats.score,
+            finalLevel: stats.level,
+            finalLines: stats.lines
+          })
           setGameOver(true)
           return
         }
@@ -424,6 +456,11 @@ export default function PentrisGame() {
       setBoard(currentBoard)
       boardRef.current = currentBoard
 
+      logger.current.log('piece_locked', {
+        piece,
+        position: { x: piece.x, y: piece.y }
+      })
+
       // Check for completed lines
       const completedLines = checkCompletedLines(currentBoard)
       if (completedLines.length > 0) {
@@ -434,12 +471,17 @@ export default function PentrisGame() {
         // Update score and level
         const newLines = stats.lines + completedLines.length
         const newLevel = Math.floor(newLines / 10) + 1
-
-        // Calculate score based on number of lines cleared
-        const lineScore =
-          SCORING.linesClear[completedLines.length as keyof typeof SCORING.linesClear] || completedLines.length * 300
-
+        const lineScore = SCORING.linesClear[completedLines.length as keyof typeof SCORING.linesClear] || completedLines.length * 300
         const newScore = stats.score + lineScore * stats.level
+
+        logger.current.log('lines_cleared', {
+          count: completedLines.length,
+          lineScore,
+          multiplier: stats.level,
+          totalScore: lineScore * stats.level,
+          newLines,
+          newLevel
+        })
 
         setStats({
           score: newScore,
@@ -449,17 +491,24 @@ export default function PentrisGame() {
 
         if (newLevel > stats.level) {
           moveDownInterval.current = Math.max(100, BASE_DROP_INTERVAL - (newLevel - 1) * LEVEL_SPEED_FACTOR)
+          logger.current.log('level_up', {
+            oldLevel: stats.level,
+            newLevel,
+            newInterval: moveDownInterval.current
+          })
         }
       }
 
       // Generate a new piece
       const newNextPiece = generateRandomPiece()
+      logger.current.log('piece_generated', { piece: newNextPiece })
 
       // Set next piece as current and generate new next piece
       setCurrentPiece(nextPiece)
       currentPieceRef.current = nextPiece
       setNextPiece(newNextPiece)
     } catch (error) {
+      logger.current.log('error', { message: 'Error in lockPieceAtPosition', error }, 'error')
       console.error("Error in lockPieceAtPosition:", error)
     }
   }
@@ -545,16 +594,19 @@ export default function PentrisGame() {
   const togglePause = (): void => {
     if (gameOver || !gameStarted) return
 
-    setPaused(!paused)
-    if (paused) {
-      // Resume game
-      gameLoop()
-      startAutoDropTimer()
-    } else {
+    const newPausedState = !paused
+    setPaused(newPausedState)
+    logger.current.log('game_paused', { paused: newPausedState })
+
+    if (newPausedState) {
       // Pause game
       if (autoDropTimerRef.current) {
         clearTimeout(autoDropTimerRef.current)
       }
+    } else {
+      // Resume game
+      gameLoop()
+      startAutoDropTimer()
     }
   }
 
@@ -838,6 +890,19 @@ export default function PentrisGame() {
     )
   }
 
+  // Add a button to download game logs
+  const downloadLogs = () => {
+    const blob = new Blob([logger.current.export()], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `pentris-game-log-${Date.now()}.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="flex flex-col md:flex-row gap-6 items-center">
       <div className="relative">
@@ -892,6 +957,10 @@ export default function PentrisGame() {
             <li>P : Pause/Resume</li>
           </ul>
         </div>
+
+        <Button onClick={downloadLogs} className="w-full">
+          Download Game Logs
+        </Button>
       </div>
 
       <MobileControls
