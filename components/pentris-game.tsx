@@ -139,11 +139,13 @@ export default function PentrisGame() {
 
     autoDropTimerRef.current = setTimeout(() => {
       if (!paused && !gameOver && currentPieceRef.current) {
-        moveDown(true)
-      }
-
-      // Continue auto dropping if game is still active
-      if (!paused && !gameOver) {
+        // Only continue auto dropping if the move was successful
+        const moveSuccessful = moveDown(true)
+        if (moveSuccessful) {
+          startAutoDropTimer()
+        }
+      } else if (!paused && !gameOver) {
+        // If piece is locked, wait for next piece before starting timer
         startAutoDropTimer()
       }
     }, dropInterval)
@@ -382,8 +384,9 @@ export default function PentrisGame() {
     }
 
     if (isValidPosition(newPiece)) {
-      setCurrentPiece(newPiece)
+      // Update both state and ref in one go to prevent state conflicts
       currentPieceRef.current = newPiece
+      setCurrentPiece(newPiece)
 
       // Log move
       loggingService.logEvent(
@@ -416,33 +419,25 @@ export default function PentrisGame() {
   const hardDrop = (): void => {
     if (paused || gameOver || !currentPiece) return
 
-    let newY = currentPiece.y
+    // Calculate drop distance without moving the piece
     let dropDistance = 0
+    let testY = currentPiece.y
 
-    // Find the lowest valid position
-    while (true) {
-      newY++
-      const testPiece: GamePiece = {
-        ...currentPiece,
-        y: newY,
-      }
-
-      if (!isValidPosition(testPiece)) {
-        newY--
-        break
-      }
+    // Use a more efficient way to find the lowest position
+    while (isValidPosition({ ...currentPiece, y: testY + 1 })) {
+      testY++
       dropDistance++
     }
 
-    // Create a new piece at the lowest position
+    // Only update state once with the final position
     const droppedPiece: GamePiece = {
       ...currentPiece,
-      y: newY,
+      y: testY,
     }
 
-    // Update the current piece position
-    setCurrentPiece(droppedPiece)
+    // Update both state and ref in one go
     currentPieceRef.current = droppedPiece
+    setCurrentPiece(droppedPiece)
 
     // Log hard drop
     loggingService.logEvent(
