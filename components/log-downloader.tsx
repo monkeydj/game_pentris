@@ -63,7 +63,7 @@ export default function LogDownloader() {
           onClick={downloadLogs}
           variant="outline"
           size="sm"
-          className="flex items-center gap-1"
+          className="flex items-center gap-1 text-gray-800 hover:text-gray-900"
           disabled={logs.entries.length === 0}
         >
           <Download className="h-4 w-4" />
@@ -74,7 +74,7 @@ export default function LogDownloader() {
           onClick={toggleStats}
           variant="outline"
           size="sm"
-          className="flex items-center gap-1"
+          className="flex items-center gap-1 text-gray-800 hover:text-gray-900"
           disabled={logs.entries.length === 0}
         >
           <BarChart2 className="h-4 w-4" />
