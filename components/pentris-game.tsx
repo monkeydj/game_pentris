@@ -1010,21 +1010,24 @@ export default function PentrisGame() {
   const renderNextPiece = () => {
     if (!nextPiece) return null
 
-    // Find the dimensions of the next piece
-    let minX = Number.POSITIVE_INFINITY,
-      maxX = Number.NEGATIVE_INFINITY,
-      minY = Number.POSITIVE_INFINITY,
-      maxY = Number.NEGATIVE_INFINITY
+    // Calculate piece dimensions
+    const dimensions = nextPiece.shape.reduce(
+      (acc, [x, y]) => ({
+        minX: Math.min(acc.minX, x),
+        maxX: Math.max(acc.maxX, x),
+        minY: Math.min(acc.minY, y),
+        maxY: Math.max(acc.maxY, y),
+      }),
+      {
+        minX: Number.POSITIVE_INFINITY,
+        maxX: Number.NEGATIVE_INFINITY,
+        minY: Number.POSITIVE_INFINITY,
+        maxY: Number.NEGATIVE_INFINITY,
+      }
+    )
 
-    for (const [x, y] of nextPiece.shape) {
-      minX = Math.min(minX, x)
-      maxX = Math.max(maxX, x)
-      minY = Math.min(minY, y)
-      maxY = Math.max(maxY, y)
-    }
-
-    const width = maxX - minX + 1
-    const height = maxY - minY + 1
+    const width = dimensions.maxX - dimensions.minX + 1
+    const height = dimensions.maxY - dimensions.minY + 1
 
     return (
       <div className="bg-gray-800 p-4 rounded-md">
@@ -1037,25 +1040,21 @@ export default function PentrisGame() {
             gridTemplateRows: `repeat(${height}, 20px)`,
           }}
         >
-          {Array(height)
-            .fill(0)
-            .map((_, y) =>
-              Array(width)
-                .fill(0)
-                .map((_, x) => {
-                  const hasPiece = nextPiece.shape.some(
-                    ([pieceX, pieceY]) => pieceX - minX === x && pieceY - minY === y,
-                  )
+          {Array.from({ length: height }, (_, y) =>
+            Array.from({ length: width }, (_, x) => {
+              const hasPiece = nextPiece.shape.some(
+                ([pieceX, pieceY]) => pieceX - dimensions.minX === x && pieceY - dimensions.minY === y
+              )
 
-                  return (
-                    <div
-                      key={`${x}-${y}`}
-                      className={`w-5 h-5 ${hasPiece ? "" : "bg-gray-900"}`}
-                      style={hasPiece ? { backgroundColor: nextPiece.color } : {}}
-                    />
-                  )
-                }),
-            )}
+              return (
+                <div
+                  key={`${x}-${y}`}
+                  className={`w-5 h-5 ${hasPiece ? "" : "bg-gray-900"}`}
+                  style={hasPiece ? { backgroundColor: nextPiece.color } : {}}
+                />
+              )
+            })
+          )}
         </div>
       </div>
     )
