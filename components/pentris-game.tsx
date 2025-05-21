@@ -1039,14 +1039,20 @@ export default function PentrisGame() {
           <div
             className="grid gap-px"
             style={{
-              gridTemplateColumns: `repeat(${width}, 20px)`,
-              gridTemplateRows: `repeat(${height}, 20px)`,
+              gridTemplateColumns: "repeat(5, 20px)",
+              gridTemplateRows: "repeat(5, 20px)",
             }}
           >
-            {Array.from({ length: height }, (_, y) =>
-              Array.from({ length: width }, (_, x) => {
+            {Array.from({ length: 5 }, (_, y) =>
+              Array.from({ length: 5 }, (_, x) => {
+                // Calculate centered position
+                const offsetX = Math.floor((5 - width) / 2)
+                const offsetY = Math.floor((5 - height) / 2)
+                
                 const hasPiece = nextPiece.shape.some(
-                  ([pieceX, pieceY]) => pieceX - dimensions.minX === x && pieceY - dimensions.minY === y
+                  ([pieceX, pieceY]) => 
+                    pieceX - dimensions.minX + offsetX === x && 
+                    pieceY - dimensions.minY + offsetY === y
                 )
 
                 return (
