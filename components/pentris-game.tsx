@@ -23,6 +23,13 @@ import LogDownloader from "./log-downloader"
 import { loggingService } from "@/lib/logging-service"
 import type { CellPosition, GameBoard, GamePiece, GameStats, PieceType } from "@/lib/types"
 
+/**
+ * React component implementing a Tetris-like game with pentomino, tetromino, and tromino pieces.
+ *
+ * Manages game state, rendering, controls, scoring, piece generation, line clearing, and logging. Supports keyboard and mobile controls, dynamic drop speed, lock delay, and visual effects for locking and ghost pieces. Provides overlays for pause, game over, and next piece preview.
+ *
+ * @returns The Pentris game UI and canvas.
+ */
 export default function PentrisGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [stats, setStats] = useState<GameStats>({
