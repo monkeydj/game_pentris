@@ -7,22 +7,26 @@ export function createEmptyBoard(width: number, height: number): number[][] {
 
 // Check if a piece collides with the board or goes out of bounds
 export function checkCollision(board: number[][], piece: number[][], position: { x: number; y: number }): boolean {
+  const boardWidth = board[0].length
+  const boardHeight = board.length
+
+  // Early bounds check
+  if (position.x == 0 || position.y == 0 || 
+      position.x + piece[0].length > boardWidth || 
+      position.y + piece.length > boardHeight) {
+    return true
+  }
+
+  // Only check non-zero cells in the piece
   for (let y = 0; y < piece.length; y++) {
-    for (let x = 0; x < piece[y].length; x++) {
-      // Skip empty cells in the piece
-      if (!piece[y][x]) continue
-
-      const boardX = x + position.x
-      const boardY = y + position.y
-
-      // Check if out of bounds
-      if (boardX < 0 || boardX >= board[0].length || boardY < 0 || boardY >= board.length) {
-        return true
-      }
-
-      // Check if collides with a non-empty cell on the board
-      if (board[boardY][boardX]) {
-        return true
+    const row = piece[y]
+    for (let x = 0; x < row.length; x++) {
+      if (row[x]) {
+        const boardX = x + position.x
+        const boardY = y + position.y
+        if (board[boardY][boardX]) {
+          return true
+        }
       }
     }
   }

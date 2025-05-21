@@ -12,16 +12,8 @@ interface GameBoardProps {
 }
 
 export default function GameBoard({ board, currentPiece, position, gameOver, isPaused }: GameBoardProps) {
-  // Combine the board and the current piece for rendering
-  const displayBoard = useMemo(() => {
-    if (gameOver || isPaused) {
-      return board
-    }
-    return addPieceToBoard(board, currentPiece, position, true)
-  }, [board, currentPiece, position, gameOver, isPaused])
-
-  // Color mapping for different piece types
-  const colorMap: Record<number, string> = {
+  // Memoize the color map to prevent unnecessary re-renders
+  const colorMap = useMemo<Record<number, string>>(() => ({
     0: "bg-gray-900", // Empty cell
     1: "bg-red-500", // I piece
     2: "bg-blue-500", // J piece
@@ -35,18 +27,33 @@ export default function GameBoard({ board, currentPiece, position, gameOver, isP
     10: "bg-emerald-500", // X piece (pentomino)
     11: "bg-amber-500", // W piece (pentomino)
     12: "bg-rose-500", // Y piece (pentomino)
-    // Ghost piece (semi-transparent)
-    [-1]: "bg-gray-500 bg-opacity-30 border border-gray-400",
-  }
+    [-1]: "bg-gray-500 bg-opacity-30 border border-gray-400", // Ghost piece
+  }), [])
+
+  // Combine the board and the current piece for rendering
+  const displayBoard = useMemo(() => {
+    if (gameOver || isPaused) {
+      return board
+    }
+    return addPieceToBoard(board, currentPiece, position, true)
+  }, [board, currentPiece, position, gameOver, isPaused])
+
+  // Memoize the board cells to prevent unnecessary re-renders
+  const boardCells = useMemo(() => {
+    return displayBoard.map((row, rowIndex) =>
+      row.map((cell, colIndex) => (
+        <div
+          key={`${rowIndex}-${colIndex}`}
+          className={`w-6 h-6 ${colorMap[cell] || "bg-gray-900"}`}
+        />
+      ))
+    )
+  }, [displayBoard, colorMap])
 
   return (
     <div className="relative">
       <div className="grid grid-cols-10 gap-px">
-        {displayBoard.map((row, rowIndex) =>
-          row.map((cell, colIndex) => (
-            <div key={`${rowIndex}-${colIndex}`} className={`w-6 h-6 ${colorMap[cell] || "bg-gray-900"}`} />
-          )),
-        )}
+        {boardCells}
       </div>
 
       {gameOver && (

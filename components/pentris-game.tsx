@@ -31,9 +31,10 @@ export default function PentrisGame() {
   const [gameOver, setGameOver] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
 
-  // Game loop with useRef to avoid dependency issues
-  const gameLoopRef = useRef<NodeJS.Timeout | null>(null)
-  const dropSpeedRef = useRef(1000) // Initial drop speed in ms
+  // Game loop with requestAnimationFrame
+  const lastTimeRef = useRef<number>(0)
+  const dropSpeedRef = useRef<number>(1000) // Initial drop speed in ms
+  const animationFrameRef = useRef<number>()
 
   // Calculate drop speed based on level
   useEffect(() => {
@@ -81,18 +82,36 @@ export default function PentrisGame() {
     }
   }, [board, currentPiece, position, gameOver, isPaused, nextPiece, level])
 
-  // Game loop
+  // Game loop using requestAnimationFrame
+  const gameLoop = useCallback((timestamp: number) => {
+    if (gameOver || isPaused) return
+
+    if (!lastTimeRef.current) {
+      lastTimeRef.current = timestamp
+    }
+
+    const elapsed = timestamp - lastTimeRef.current
+
+    if (elapsed > dropSpeedRef.current) {
+      moveDown()
+      lastTimeRef.current = timestamp
+    }
+
+    animationFrameRef.current = requestAnimationFrame(gameLoop)
+  }, [gameOver, isPaused, moveDown])
+
+  // Start/stop game loop
   useEffect(() => {
     if (!gameOver && !isPaused) {
-      gameLoopRef.current = setInterval(moveDown, dropSpeedRef.current)
+      animationFrameRef.current = requestAnimationFrame(gameLoop)
     }
 
     return () => {
-      if (gameLoopRef.current) {
-        clearInterval(gameLoopRef.current)
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current)
       }
     }
-  }, [moveDown, gameOver, isPaused])
+  }, [gameLoop, gameOver, isPaused])
 
   // Move piece left
   const moveLeft = useCallback(() => {
@@ -155,10 +174,17 @@ export default function PentrisGame() {
     moveDown()
   }, [board, currentPiece, position, moveDown, gameOver, isPaused])
 
-  // Handle keyboard input
+  // Handle keyboard input with debouncing
+  const lastKeyPressRef = useRef<number>(0)
+  const KEY_PRESS_DELAY = 50 // ms
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (gameOver) return
+
+      const now = Date.now()
+      if (now - lastKeyPressRef.current < KEY_PRESS_DELAY) return
+      lastKeyPressRef.current = now
 
       switch (e.key) {
         case "ArrowLeft":
@@ -198,7 +224,7 @@ export default function PentrisGame() {
   }, [moveLeft, moveRight, moveDown, rotatePiece, hardDrop, gameOver])
 
   // Reset game
-  const resetGame = () => {
+  const resetGame = useCallback(() => {
     setBoard(createEmptyBoard(BOARD_WIDTH, BOARD_HEIGHT))
     setCurrentPiece(createRandomPiece())
     setNextPiece(createRandomPiece())
@@ -208,12 +234,13 @@ export default function PentrisGame() {
     setLinesCleared(0)
     setGameOver(false)
     setIsPaused(false)
-  }
+    lastTimeRef.current = 0
+  }, [])
 
   // Toggle pause
-  const togglePause = () => {
+  const togglePause = useCallback(() => {
     setIsPaused((prev) => !prev)
-  }
+  }, [])
 
   return (
     <div className="flex flex-col md:flex-row gap-6 items-center">
