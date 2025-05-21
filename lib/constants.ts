@@ -43,7 +43,7 @@ export const LOCK_DELAY = 1500 // 1.5 seconds in milliseconds
 export const BASE_DROP_INTERVAL = 1000 // 1 second in milliseconds
 export const LEVEL_SPEED_FACTOR = 50 // ms faster per level
 
-// Piece type weights (probability distribution)
+// Piece type weights for probability distribution of next piece
 export const PIECE_TYPE_WEIGHTS = {
   tromino: 80,
   tetromino: 130,
