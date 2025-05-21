@@ -1095,8 +1095,6 @@ export default function PentrisGame() {
           </div>
         </div>
 
-        <LogDownloader />
-
         <div className="flex gap-2">
           <Button onClick={togglePause} disabled={!gameStarted || gameOver} className="flex-1">
             {paused ? "Resume" : "Pause"}
@@ -1117,6 +1115,8 @@ export default function PentrisGame() {
             <li>P : Pause/Resume</li>
           </ul>
         </div>
+  
+        <LogDownloader />
       </div>
 
       <MobileControls
