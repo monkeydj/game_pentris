@@ -59,7 +59,7 @@ export const PIECE_TYPE_WEIGHTS = {
 
 // Scoring system
 export const SCORING = {
-  softDrop: 1, // Points per cell when soft dropping
+  softDrop: 0, // Points per cell when soft dropping
   hardDrop: 2, // Points per cell when hard dropping
   linesClear: {
     1: 100,
