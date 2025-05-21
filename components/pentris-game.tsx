@@ -1031,30 +1031,34 @@ export default function PentrisGame() {
 
     return (
       <div className="bg-gray-800 p-4 rounded-md">
-        <h3 className="text-lg font-medium mb-1 text-white">Next Piece</h3>
-        <p className="text-sm text-gray-300 mb-2">{getPieceTypeLabel(nextPiece)}</p>
-        <div
-          className="grid gap-px"
-          style={{
-            gridTemplateColumns: `repeat(${width}, 20px)`,
-            gridTemplateRows: `repeat(${height}, 20px)`,
-          }}
-        >
-          {Array.from({ length: height }, (_, y) =>
-            Array.from({ length: width }, (_, x) => {
-              const hasPiece = nextPiece.shape.some(
-                ([pieceX, pieceY]) => pieceX - dimensions.minX === x && pieceY - dimensions.minY === y
-              )
+        <div className="flex justify-between items-start">
+          <h3 className="text-lg font-medium text-white">
+            Next Piece
+            <div className="text-sm text-gray-300 mt-1">{getPieceTypeLabel(nextPiece)}</div>
+          </h3>
+          <div
+            className="grid gap-px"
+            style={{
+              gridTemplateColumns: `repeat(${width}, 20px)`,
+              gridTemplateRows: `repeat(${height}, 20px)`,
+            }}
+          >
+            {Array.from({ length: height }, (_, y) =>
+              Array.from({ length: width }, (_, x) => {
+                const hasPiece = nextPiece.shape.some(
+                  ([pieceX, pieceY]) => pieceX - dimensions.minX === x && pieceY - dimensions.minY === y
+                )
 
-              return (
-                <div
-                  key={`${x}-${y}`}
-                  className={`w-5 h-5 ${hasPiece ? "" : "bg-gray-900"}`}
-                  style={hasPiece ? { backgroundColor: nextPiece.color } : {}}
-                />
-              )
-            })
-          )}
+                return (
+                  <div
+                    key={`${x}-${y}`}
+                    className={`w-5 h-5 ${hasPiece ? "" : "bg-gray-900"}`}
+                    style={hasPiece ? { backgroundColor: nextPiece.color } : {}}
+                  />
+                )
+              })
+            )}
+          </div>
         </div>
       </div>
     )
