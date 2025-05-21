@@ -1079,19 +1079,21 @@ export default function PentrisGame() {
         {renderNextPiece()}
 
         <div className="bg-gray-800 p-4 rounded-md text-white">
-          <div className="mb-2">
-            <h3 className="text-lg font-medium">Score</h3>
-            <p className="text-2xl font-bold">{stats.score}</p>
-          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <h3 className="text-lg font-medium text-gray-400">Score</h3>
+              <p className="text-2xl font-bold">{stats.score}</p>
+            </div>
 
-          <div className="mb-2">
-            <h3 className="text-lg font-medium">Level</h3>
-            <p className="text-2xl font-bold">{stats.level}</p>
-          </div>
+            <div>
+              <h3 className="text-lg font-medium text-gray-400">Level</h3>
+              <p className="text-2xl font-bold">{stats.level}</p>
+            </div>
 
-          <div>
-            <h3 className="text-lg font-medium">Lines</h3>
-            <p className="text-2xl font-bold">{stats.lines}</p>
+            <div>
+              <h3 className="text-lg font-medium text-gray-400">Lines</h3>
+              <p className="text-2xl font-bold">{stats.lines}</p>
+            </div>
           </div>
         </div>
 
