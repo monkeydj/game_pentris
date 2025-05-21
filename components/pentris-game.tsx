@@ -902,6 +902,7 @@ export default function PentrisGame() {
         ctx.fillStyle = "#fff"
         ctx.font = "16px Arial"
         ctx.textAlign = "center"
+        ctx.textBaseline = "middle"
         ctx.fillText(`Lock in: ${remainingTime.toFixed(1)}s`, canvas.width / 2, 20)
       }
     }
@@ -911,10 +912,16 @@ export default function PentrisGame() {
       ctx.fillStyle = "rgba(0, 0, 0, 0.7)"
       ctx.fillRect(0, 0, canvas.width, canvas.height)
 
-      ctx.fillStyle = "#fff"
+      ctx.fillStyle = "#FFEB3B"
       ctx.font = "24px Arial"
       ctx.textAlign = "center"
-      ctx.fillText(gameOver ? "Game Over" : "Paused", canvas.width / 2, canvas.height / 2)
+      ctx.textBaseline = "middle"
+      ctx.fillText(gameOver ? "Game Over" : "Paused", canvas.width / 2, canvas.height / 2 - 40)
+
+      if (paused) {
+        ctx.font = "16px Arial"
+        ctx.fillText("Press P to resume", canvas.width / 2, canvas.height / 2 - 40)
+      }
     }
 
     // Draw score popup if points were just earned
@@ -922,6 +929,7 @@ export default function PentrisGame() {
       ctx.fillStyle = "#FFEB3B"
       ctx.font = "bold 18px Arial"
       ctx.textAlign = "center"
+      ctx.textBaseline = "middle"
       ctx.fillText(`+${lastMoveScoreRef.current}`, canvas.width / 2, canvas.height / 2 - 40)
 
       // Clear the score popup after a short delay
