@@ -558,10 +558,11 @@ export default function PentrisGame() {
         const lineScore =
           SCORING.linesClear[completedLines.length as keyof typeof SCORING.linesClear] || completedLines.length * 300
 
-        const newScore = stats.score + lineScore * stats.level
+        // Add score for lines cleared
+        addToScore(lineScore * stats.level)
 
         const newStats = {
-          score: newScore,
+          ...stats,
           lines: newLines,
           level: newLevel,
         }
