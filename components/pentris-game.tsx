@@ -11,6 +11,7 @@ import {
   BASE_DROP_INTERVAL,
   LEVEL_SPEED_FACTOR,
   PIECE_TYPE_WEIGHTS,
+  PIECE_TYPE_SPEED_FACTORS,
   SCORING,
 } from "@/lib/constants"
 import { createPentominoShapes } from "@/lib/pentomino-shapes"
@@ -37,7 +38,6 @@ export default function PentrisGame() {
   const lockTimeRef = useRef<number>(0)
   const currentPieceRef = useRef<GamePiece | null>(null)
   const boardRef = useRef<GameBoard>([])
-  const moveDownInterval = useRef<number>(BASE_DROP_INTERVAL)
   const autoDropTimerRef = useRef<NodeJS.Timeout | null>(null)
   const lastMoveScoreRef = useRef<number>(0)
 
@@ -117,9 +117,6 @@ export default function PentrisGame() {
     loggingService.logEvent("pieceGenerated", { piece: firstPiece, isFirstPiece: true }, initialStats, firstPiece)
     loggingService.logEvent("nextPieceGenerated", { piece: secondPiece }, initialStats)
 
-    // Set initial speed based on level
-    moveDownInterval.current = BASE_DROP_INTERVAL - (initialStats.level - 1) * LEVEL_SPEED_FACTOR
-
     // Start game loop
     if (gameLoopRef.current) cancelAnimationFrame(gameLoopRef.current)
     gameLoop()
@@ -134,6 +131,12 @@ export default function PentrisGame() {
       clearTimeout(autoDropTimerRef.current)
     }
 
+    // Calculate drop interval based on level and piece type
+    const baseInterval = Math.max(100, BASE_DROP_INTERVAL - (stats.level - 1) * LEVEL_SPEED_FACTOR)
+    const pieceType = currentPieceRef.current?.pieceType || "tetromino"
+    const speedFactor = PIECE_TYPE_SPEED_FACTORS[pieceType]
+    const dropInterval = Math.floor(baseInterval * speedFactor)
+
     autoDropTimerRef.current = setTimeout(() => {
       if (!paused && !gameOver && currentPieceRef.current) {
         moveDown(true)
@@ -143,7 +146,7 @@ export default function PentrisGame() {
       if (!paused && !gameOver) {
         startAutoDropTimer()
       }
-    }, moveDownInterval.current)
+    }, dropInterval)
   }
 
   // Generate a random piece type based on weights
@@ -572,15 +575,12 @@ export default function PentrisGame() {
         )
 
         if (newLevel > stats.level) {
-          moveDownInterval.current = Math.max(100, BASE_DROP_INTERVAL - (newLevel - 1) * LEVEL_SPEED_FACTOR)
-
           // Log level up
           loggingService.logEvent(
             "levelUp",
             {
               oldLevel: stats.level,
               newLevel,
-              newDropInterval: moveDownInterval.current,
             },
             newStats,
           )
