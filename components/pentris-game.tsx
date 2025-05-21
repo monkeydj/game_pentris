@@ -273,29 +273,38 @@ export default function PentrisGame() {
   const resetLockTimer = (): void => {
     if (lockTimerRef.current) {
       clearTimeout(lockTimerRef.current)
-
-      lockTimeRef.current = Date.now() + LOCK_DELAY
-
-      // Log lock timer reset
-      loggingService.logEvent(
-        "lockTimerReset",
-        {
-          delay: LOCK_DELAY,
-          piecePosition: currentPieceRef.current
-            ? { x: currentPieceRef.current.x, y: currentPieceRef.current.y }
-            : null,
-        },
-        stats,
-        currentPieceRef.current,
-      )
-
-      lockTimerRef.current = setTimeout(() => {
-        // Make sure we're still in a valid game state
-        if (!gameOver && !paused) {
-          finalizeLock()
-        }
-      }, LOCK_DELAY)
+      lockTimerRef.current = null
     }
+
+    // Only reset if the piece can still move down
+    if (currentPieceRef.current && canMoveDown(currentPieceRef.current)) {
+      setIsLocking(false)
+      return
+    }
+
+    // If piece can't move down, restart the lock timer
+    setIsLocking(true)
+    lockTimeRef.current = Date.now() + LOCK_DELAY
+
+    // Log lock timer reset
+    loggingService.logEvent(
+      "lockTimerReset",
+      {
+        delay: LOCK_DELAY,
+        piecePosition: currentPieceRef.current
+          ? { x: currentPieceRef.current.x, y: currentPieceRef.current.y }
+          : null,
+      },
+      stats,
+      currentPieceRef.current,
+    )
+
+    lockTimerRef.current = setTimeout(() => {
+      // Make sure we're still in a valid game state
+      if (!gameOver && !paused) {
+        finalizeLock()
+      }
+    }, LOCK_DELAY)
   }
 
   // Finalize the locking process
@@ -339,9 +348,11 @@ export default function PentrisGame() {
         newPiece,
       )
 
-      // Reset lock timer if piece is at bottom but moved
-      if (isLocking && !canMoveDown(newPiece)) {
+      // Check if piece can still move down after moving left
+      if (isLocking && canMoveDown(newPiece)) {
         resetLockTimer()
+      } else if (!isLocking && !canMoveDown(newPiece)) {
+        startLockTimer()
       }
     }
   }
@@ -367,9 +378,11 @@ export default function PentrisGame() {
         newPiece,
       )
 
-      // Reset lock timer if piece is at bottom but moved
-      if (isLocking && !canMoveDown(newPiece)) {
+      // Check if piece can still move down after moving right
+      if (isLocking && canMoveDown(newPiece)) {
         resetLockTimer()
+      } else if (!isLocking && !canMoveDown(newPiece)) {
+        startLockTimer()
       }
     }
   }
@@ -645,9 +658,11 @@ export default function PentrisGame() {
         newPiece,
       )
 
-      // Reset lock timer if piece is at bottom but rotated
-      if (isLocking && !canMoveDown(newPiece)) {
+      // Check if piece can still move down after rotation
+      if (isLocking && canMoveDown(newPiece)) {
         resetLockTimer()
+      } else if (!isLocking && !canMoveDown(newPiece)) {
+        startLockTimer()
       }
     } else {
       // Try wall kicks (move left/right to make rotation work)
@@ -675,9 +690,11 @@ export default function PentrisGame() {
             kickedPiece,
           )
 
-          // Reset lock timer if piece is at bottom but rotated with wall kick
-          if (isLocking && !canMoveDown(kickedPiece)) {
+          // Check if piece can still move down after rotation with wall kick
+          if (isLocking && canMoveDown(kickedPiece)) {
             resetLockTimer()
+          } else if (!isLocking && !canMoveDown(kickedPiece)) {
+            startLockTimer()
           }
 
           break
