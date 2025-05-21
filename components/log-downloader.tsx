@@ -56,7 +56,12 @@ export default function LogDownloader() {
 
   return (
     <div className="bg-gray-800 p-4 rounded-md text-white">
-      <h3 className="text-lg font-medium mb-2">Game Data</h3>
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-lg font-medium">Game Data</h3>
+        <p className="text-xs text-gray-400">
+          {logs.entries.length > 0 ? `${logs.entries.length} events logged` : "Nothing available yet"}
+        </p>
+      </div>
 
       <div className="flex gap-2 mb-3">
         <Button
@@ -96,10 +101,6 @@ export default function LogDownloader() {
           </p>
         </div>
       )}
-
-      <p className="text-xs text-gray-400 mt-2">
-        {logs.entries.length > 0 ? `${logs.entries.length} events logged` : "No game data available yet"}
-      </p>
     </div>
   )
 }
