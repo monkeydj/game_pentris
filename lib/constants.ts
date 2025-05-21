@@ -45,9 +45,9 @@ export const LEVEL_SPEED_FACTOR = 50 // ms faster per level
 
 // Piece type weights (probability distribution)
 export const PIECE_TYPE_WEIGHTS = {
-  tromino: 30,
-  tetromino: 40,
-  pentomino: 30,
+  tromino: 80,
+  tetromino: 130,
+  pentomino: 210,
 }
 
 // Scoring system
