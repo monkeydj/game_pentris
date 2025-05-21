@@ -11,6 +11,7 @@ import {
   BASE_DROP_INTERVAL,
   LEVEL_SPEED_FACTOR,
   PIECE_TYPE_WEIGHTS,
+  PIECE_TYPE_SPEED_FACTORS,
   SCORING,
 } from "@/lib/constants"
 import { createPentominoShapes } from "@/lib/pentomino-shapes"
@@ -37,7 +38,6 @@ export default function PentrisGame() {
   const lockTimeRef = useRef<number>(0)
   const currentPieceRef = useRef<GamePiece | null>(null)
   const boardRef = useRef<GameBoard>([])
-  const moveDownInterval = useRef<number>(BASE_DROP_INTERVAL)
   const autoDropTimerRef = useRef<NodeJS.Timeout | null>(null)
   const lastMoveScoreRef = useRef<number>(0)
 
@@ -117,9 +117,6 @@ export default function PentrisGame() {
     loggingService.logEvent("pieceGenerated", { piece: firstPiece, isFirstPiece: true }, initialStats, firstPiece)
     loggingService.logEvent("nextPieceGenerated", { piece: secondPiece }, initialStats)
 
-    // Set initial speed based on level
-    moveDownInterval.current = BASE_DROP_INTERVAL - (initialStats.level - 1) * LEVEL_SPEED_FACTOR
-
     // Start game loop
     if (gameLoopRef.current) cancelAnimationFrame(gameLoopRef.current)
     gameLoop()
@@ -134,16 +131,24 @@ export default function PentrisGame() {
       clearTimeout(autoDropTimerRef.current)
     }
 
+    // Calculate drop interval based on level and piece type
+    const baseInterval = Math.max(100, BASE_DROP_INTERVAL - (stats.level - 1) * LEVEL_SPEED_FACTOR)
+    const pieceType = currentPieceRef.current?.pieceType || "tetromino"
+    const speedFactor = PIECE_TYPE_SPEED_FACTORS[pieceType]
+    const dropInterval = Math.floor(baseInterval * speedFactor)
+
     autoDropTimerRef.current = setTimeout(() => {
       if (!paused && !gameOver && currentPieceRef.current) {
-        moveDown(true)
-      }
-
-      // Continue auto dropping if game is still active
-      if (!paused && !gameOver) {
+        // Only continue auto dropping if the move was successful
+        const moveSuccessful = moveDown(true)
+        if (moveSuccessful) {
+          startAutoDropTimer()
+        }
+      } else if (!paused && !gameOver) {
+        // If piece is locked, wait for next piece before starting timer
         startAutoDropTimer()
       }
-    }, moveDownInterval.current)
+    }, dropInterval)
   }
 
   // Generate a random piece type based on weights
@@ -268,29 +273,38 @@ export default function PentrisGame() {
   const resetLockTimer = (): void => {
     if (lockTimerRef.current) {
       clearTimeout(lockTimerRef.current)
-
-      lockTimeRef.current = Date.now() + LOCK_DELAY
-
-      // Log lock timer reset
-      loggingService.logEvent(
-        "lockTimerReset",
-        {
-          delay: LOCK_DELAY,
-          piecePosition: currentPieceRef.current
-            ? { x: currentPieceRef.current.x, y: currentPieceRef.current.y }
-            : null,
-        },
-        stats,
-        currentPieceRef.current,
-      )
-
-      lockTimerRef.current = setTimeout(() => {
-        // Make sure we're still in a valid game state
-        if (!gameOver && !paused) {
-          finalizeLock()
-        }
-      }, LOCK_DELAY)
+      lockTimerRef.current = null
     }
+
+    // Only reset if the piece can still move down
+    if (currentPieceRef.current && canMoveDown(currentPieceRef.current)) {
+      setIsLocking(false)
+      return
+    }
+
+    // If piece can't move down, restart the lock timer
+    setIsLocking(true)
+    lockTimeRef.current = Date.now() + LOCK_DELAY
+
+    // Log lock timer reset
+    loggingService.logEvent(
+      "lockTimerReset",
+      {
+        delay: LOCK_DELAY,
+        piecePosition: currentPieceRef.current
+          ? { x: currentPieceRef.current.x, y: currentPieceRef.current.y }
+          : null,
+      },
+      stats,
+      currentPieceRef.current,
+    )
+
+    lockTimerRef.current = setTimeout(() => {
+      // Make sure we're still in a valid game state
+      if (!gameOver && !paused) {
+        finalizeLock()
+      }
+    }, LOCK_DELAY)
   }
 
   // Finalize the locking process
@@ -334,9 +348,11 @@ export default function PentrisGame() {
         newPiece,
       )
 
-      // Reset lock timer if piece is at bottom but moved
-      if (isLocking && !canMoveDown(newPiece)) {
+      // Check if piece can still move down after moving left
+      if (isLocking && canMoveDown(newPiece)) {
         resetLockTimer()
+      } else if (!isLocking && !canMoveDown(newPiece)) {
+        startLockTimer()
       }
     }
   }
@@ -362,9 +378,11 @@ export default function PentrisGame() {
         newPiece,
       )
 
-      // Reset lock timer if piece is at bottom but moved
-      if (isLocking && !canMoveDown(newPiece)) {
+      // Check if piece can still move down after moving right
+      if (isLocking && canMoveDown(newPiece)) {
         resetLockTimer()
+      } else if (!isLocking && !canMoveDown(newPiece)) {
+        startLockTimer()
       }
     }
   }
@@ -379,8 +397,9 @@ export default function PentrisGame() {
     }
 
     if (isValidPosition(newPiece)) {
-      setCurrentPiece(newPiece)
+      // Update both state and ref in one go to prevent state conflicts
       currentPieceRef.current = newPiece
+      setCurrentPiece(newPiece)
 
       // Log move
       loggingService.logEvent(
@@ -413,33 +432,25 @@ export default function PentrisGame() {
   const hardDrop = (): void => {
     if (paused || gameOver || !currentPiece) return
 
-    let newY = currentPiece.y
+    // Calculate drop distance without moving the piece
     let dropDistance = 0
+    let testY = currentPiece.y
 
-    // Find the lowest valid position
-    while (true) {
-      newY++
-      const testPiece: GamePiece = {
-        ...currentPiece,
-        y: newY,
-      }
-
-      if (!isValidPosition(testPiece)) {
-        newY--
-        break
-      }
+    // Use a more efficient way to find the lowest position
+    while (isValidPosition({ ...currentPiece, y: testY + 1 })) {
+      testY++
       dropDistance++
     }
 
-    // Create a new piece at the lowest position
+    // Only update state once with the final position
     const droppedPiece: GamePiece = {
       ...currentPiece,
-      y: newY,
+      y: testY,
     }
 
-    // Update the current piece position
-    setCurrentPiece(droppedPiece)
+    // Update both state and ref in one go
     currentPieceRef.current = droppedPiece
+    setCurrentPiece(droppedPiece)
 
     // Log hard drop
     loggingService.logEvent(
@@ -547,10 +558,11 @@ export default function PentrisGame() {
         const lineScore =
           SCORING.linesClear[completedLines.length as keyof typeof SCORING.linesClear] || completedLines.length * 300
 
-        const newScore = stats.score + lineScore * stats.level
+        // Add score for lines cleared
+        addToScore(lineScore * stats.level)
 
         const newStats = {
-          score: newScore,
+          ...stats,
           lines: newLines,
           level: newLevel,
         }
@@ -572,15 +584,12 @@ export default function PentrisGame() {
         )
 
         if (newLevel > stats.level) {
-          moveDownInterval.current = Math.max(100, BASE_DROP_INTERVAL - (newLevel - 1) * LEVEL_SPEED_FACTOR)
-
           // Log level up
           loggingService.logEvent(
             "levelUp",
             {
               oldLevel: stats.level,
               newLevel,
-              newDropInterval: moveDownInterval.current,
             },
             newStats,
           )
@@ -650,9 +659,11 @@ export default function PentrisGame() {
         newPiece,
       )
 
-      // Reset lock timer if piece is at bottom but rotated
-      if (isLocking && !canMoveDown(newPiece)) {
+      // Check if piece can still move down after rotation
+      if (isLocking && canMoveDown(newPiece)) {
         resetLockTimer()
+      } else if (!isLocking && !canMoveDown(newPiece)) {
+        startLockTimer()
       }
     } else {
       // Try wall kicks (move left/right to make rotation work)
@@ -680,9 +691,11 @@ export default function PentrisGame() {
             kickedPiece,
           )
 
-          // Reset lock timer if piece is at bottom but rotated with wall kick
-          if (isLocking && !canMoveDown(kickedPiece)) {
+          // Check if piece can still move down after rotation with wall kick
+          if (isLocking && canMoveDown(kickedPiece)) {
             resetLockTimer()
+          } else if (!isLocking && !canMoveDown(kickedPiece)) {
+            startLockTimer()
           }
 
           break
